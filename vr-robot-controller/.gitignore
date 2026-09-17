@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# mediamtx binary + downloaded release archives (platform-specific, don't commit)
+streaming/mediamtx
+streaming/mediamtx_*.tar.gz
+streaming/mediamtx_*.zip
+
+# TLS certs generated for local HTTPS testing (see docs/setup_guide.md) — never commit these
+*.pem
+*.key
+*.crt
+
+# OS / editor
+.DS_Store
+.vscode/
+*.swp

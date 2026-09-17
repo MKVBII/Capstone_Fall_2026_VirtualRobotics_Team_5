@@ -1,0 +1,5 @@
+websockets>=12.0
+# Uncomment once wiring up real hardware on the Pi (not needed for dev-machine testing):
+# RPi.GPIO
+# adafruit-circuitpython-pca9685
+# adafruit-blinka

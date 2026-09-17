@@ -1,0 +1,17 @@
+# Runs pi-server/server.py on boot.
+# Install: sudo cp pi-server.service /etc/systemd/system/
+#          sudo systemctl enable --now pi-server.service
+[Unit]
+Description=VR Universal Robot Controller - Pi WebSocket server (OSOYOO car)
+After=network.target
+
+[Service]
+Type=simple
+# TODO: replace with the real path, e.g. /home/pi/vr-robot-controller/pi-server
+WorkingDirectory=/path/to/pi-server
+ExecStart=/path/to/pi-server/.venv/bin/python3 server.py
+Restart=on-failure
+User=pi
+
+[Install]
+WantedBy=multi-user.target

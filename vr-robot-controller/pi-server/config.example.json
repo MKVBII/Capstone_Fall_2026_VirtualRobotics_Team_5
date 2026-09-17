@@ -1,0 +1,7 @@
+{
+  "host": "0.0.0.0",
+  "port": 8765,
+  "watchdogTimeoutSeconds": 0.3,
+  "statusPushHz": 5,
+  "_comment": "Copy to config.json and wire these into server.py's constants once you want them runtime-configurable instead of hardcoded."
+}

@@ -1,0 +1,18 @@
+# Runs mediamtx + rpicam-vid (streaming/start-stream.sh) on boot.
+[Unit]
+Description=VR Universal Robot Controller - video streaming (mediamtx + rpicam-vid)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/streaming
+# mediamtx runs as its own process; start-stream.sh publishes into it.
+# TODO: this needs both processes running together — consider a small
+# wrapper script, or two separate systemd units with a dependency between
+# them, once you've settled on the exact commands during testing.
+ExecStart=/bin/bash -c './mediamtx mediamtx.yml & ./start-stream.sh'
+Restart=on-failure
+User=pi
+
+[Install]
+WantedBy=multi-user.target

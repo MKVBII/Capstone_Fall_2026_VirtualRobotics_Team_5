@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>video_streaming</name>
+  <version>0.0.1</version>
+  <description>
+    Captures the OSOYOO car's CSI camera via picamera2/libcamera and streams
+    it to the VR client over WebRTC/RTSP, kept separate from the rosbridge
+    control/status channel so video never delays a stop command.
+  </description>
+  <maintainer email="burchamw@merrimack.edu">Wesley Burcham</maintainer>
+  <license>TODO</license>
+
+  <depend>rclpy</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

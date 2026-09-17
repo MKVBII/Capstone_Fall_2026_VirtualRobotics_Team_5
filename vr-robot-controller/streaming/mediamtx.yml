@@ -1,0 +1,23 @@
+# Config for mediamtx (https://github.com/bluenviron/mediamtx) — a single
+# static-binary media server. No custom streaming code needed: rpicam-vid
+# pushes video in, mediamtx serves it back out as HLS (simple, ~2-6s
+# latency, used by quest-client/js/video-panel.js) and/or WebRTC/WHEP
+# (lower latency, more setup) without you writing frame-handling code.
+#
+# Install: download the arm64 release for the Pi from the mediamtx GitHub
+# releases page and run it with this config: ./mediamtx mediamtx.yml
+
+# HLS output (what the Quest client uses by default)
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsSegmentDuration: 1s
+
+# WebRTC/WHEP output (optional lower-latency upgrade path)
+webrtc: yes
+webrtcAddress: :8889
+
+paths:
+  car:
+    # rpicam-vid (see start-stream.sh) publishes to this path via RTSP.
+    source: publisher

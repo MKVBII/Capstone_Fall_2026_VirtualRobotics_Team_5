@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>VR Universal Robot Controller</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: sans-serif; }
+    canvas { display: block; }
+
+    #overlay { position: absolute; top: 0; left: 0; right: 0; padding: 12px; text-align: center; z-index: 1; }
+    #status { font-size: 13px; opacity: 0.8; margin-top: 8px; }
+
+    /* Robot-select menu: a plain 2D screen shown BEFORE entering VR.
+       This is the "menu screen on bootup" / fast robot-swap mechanism —
+       see docs/adding_a_robot.md and docs/architecture.md section on the
+       driver plugin system. */
+    #robot-menu {
+      position: absolute; inset: 0; z-index: 2;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #111;
+    }
+    #robot-menu.hidden { display: none; }
+    #robot-menu h1 { font-size: 22px; margin-bottom: 4px; }
+    #robot-menu p.subtitle { opacity: 0.7; margin-top: 0; margin-bottom: 24px; font-size: 14px; }
+    #robot-list { display: flex; flex-direction: column; gap: 10px; width: 320px; max-width: 90vw; }
+    .robot-option {
+      display: block; width: 100%; text-align: left; padding: 14px 16px;
+      background: #222; border: 2px solid #333; border-radius: 8px; color: #eee;
+      font-size: 16px; cursor: pointer;
+    }
+    .robot-option:hover { border-color: #5b9dff; }
+    .robot-option.selected { border-color: #5b9dff; background: #1a2c44; }
+    .robot-option .name { font-weight: bold; }
+    .robot-option .desc { font-size: 13px; opacity: 0.7; margin-top: 2px; }
+    #robot-list.empty::after {
+      content: "No drivers found in pi-server/drivers/ — see docs/adding_a_robot.md";
+      opacity: 0.6; font-size: 13px;
+    }
+    #refresh-robots { margin-top: 16px; background: none; border: 1px solid #444; color: #aaa;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+    #enter-vr-row { margin-top: 24px; }
+    #enter-vr { font-size: 18px; padding: 10px 24px; }
+    #enter-vr:disabled { opacity: 0.4; }
+
+    #command-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 1;
+      display: flex; gap: 8px; justify-content: center; padding: 10px; flex-wrap: wrap;
+    }
+    #command-bar.hidden { display: none; }
+    #command-bar button { padding: 8px 14px; font-size: 14px; border-radius: 6px;
+      border: 1px solid #444; background: #222; color: #eee; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!--
+    WebXR requires a secure context (https://, or localhost). Serving this
+    over plain http:// from the Pi will make navigator.xr calls silently
+    fail in the Quest Browser — see docs/setup_guide.md for how to serve
+    this with a self-signed cert.
+  -->
+
+  <div id="robot-menu">
+    <h1>Select a robot</h1>
+    <p class="subtitle">Pick which robot to control this session — switch anytime by reloading this page.</p>
+    <div id="robot-list"></div>
+    <button id="refresh-robots">Rescan drivers/</button>
+    <div id="enter-vr-row">
+      <button id="enter-vr" disabled>Enter VR</button>
+    </div>
+    <div id="status">Not connected</div>
+  </div>
+
+  <div id="command-bar" class="hidden"></div>
+
+  <!-- Three.js via CDN, pinned version. See docs/architecture.md for why. -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <script src="js/network.js"></script>
+  <script src="js/video-panel.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
