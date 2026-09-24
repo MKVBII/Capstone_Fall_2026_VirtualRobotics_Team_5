@@ -1,9 +1,60 @@
+# Setup Guide
 
 > TODO: fill in as each step is actually verified on hardware. This is the
 > skeleton to fill in, not a finished guide yet.
 
+## 0. Dev machine (no Pi, no robot — for running tests / `docs/sprint1_demo.md`)
+
+You don't need any of the Pi/Quest steps below just to run the test suite
+or the hardware-free demo on your own laptop. You do need a real Python
+install, which trips people up on Windows specifically:
+
+**Windows:** `python3` is not a real command on Windows even after
+installing Python — use `python` and `pip` instead everywhere these docs
+say `python3`. If `python`, `python3`, and `pip` all fail with
+"not recognized" or open the Microsoft Store, Python isn't actually
+installed yet — that error is Windows' app-execution-alias stub, not a
+real Python. Fix:
+
+1. Install Python from [python.org/downloads](https://www.python.org/downloads/)
+   (not the Microsoft Store listing) — on the first installer screen,
+   check **"Add python.exe to PATH"** before clicking Install.
+2. Close and reopen PowerShell (PATH changes don't apply to an
+   already-open terminal).
+3. Verify: `python --version` and `pip --version` should both print a
+   version number.
+4. If it still fails after that: Settings → Apps → Advanced app settings
+   → App execution aliases → turn OFF the `python.exe`/`python3.exe`
+   entries under "App Installer," then reopen PowerShell.
+5. Alternative to steps 1-2 if you'd rather stay in PowerShell:
+   `winget install Python.Python.3.12`, then reopen PowerShell.
+
+**Mac/Linux:** `python3` and `pip3` (or `pip` inside a venv) should
+already work if Python 3.9+ is installed; `brew install python3` (Mac) or
+your distro's package manager if not.
+
+Once `python`/`python3` + `pip` work, from `pi-server/`:
+```
+pip install -r requirements.txt
+pip install pytest
+python -m pytest ../tests/pi_server_tests -v    # Windows: python, not python3
+```
+See `docs/sprint1_demo.md` for the two-terminal live demo.
+
 ## 1. Raspberry Pi (OSOYOO car, model 2020005500)
 
+0. **Physically assemble and seat the Pi first — this is a hardware step,
+   not something any script does for you.** The OSOYOO PWM HAT is a real
+   HAT (Hardware Attached on Top): it plugs directly onto the Raspberry
+   Pi's 40-pin GPIO header, and the L298N motor driver, motors, line-
+   tracking sensors, ultrasonic sensor, SG90 servo, and battery all wire
+   into that assembly per OSOYOO's own build manual/video (linked in
+   `docs/architecture.md`'s Sources). None of `pi-server/server.py` or
+   `osoyoo_car_driver.py` can do anything until this physical assembly is
+   done — the Python code only talks to GPIO/I2C pins that are already
+   electrically wired to real hardware. Confirm the Pi boots and `i2cdetect
+   -y 1` (after step 2 below) sees the PCA9685 before writing any driver
+   code against it.
 1. Flash **Raspberry Pi OS (Bookworm, 64-bit)** to the SD card. Must be a
    Pi 2, 3, 3A+, or 4 — this kit doesn't support the Pi 5.
 2. Enable I2C (for the PWM HAT / PCA9685) and the camera interface via

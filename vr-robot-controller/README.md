@@ -24,6 +24,8 @@ week-by-week roadmap to Dec 11: [`docs/architecture.md`](docs/architecture.md)
 
 **Adding a robot? Start here:** [`docs/adding_a_robot.md`](docs/adding_a_robot.md)
 
+**No robot/Pi in hand? You can still demo the whole thing:** [`docs/sprint1_demo.md`](docs/sprint1_demo.md) — runs the full control loop with a simulated robot, on any laptop.
+
 ## How it fits together
 
 ```
@@ -52,11 +54,14 @@ OSOYOO Pi Car hardware, model 2020005500 (first robot; more via drivers/)
 | `pi-server/mapping.py` | `condition_axis` (deadzone/curve/clamp) + wheeled-robot mixing helpers — pure functions, unit tested |
 | `pi-server/robot_driver_base.py` | The universal `RobotDriver` interface (wheeled + flying/boat-like) every robot implements |
 | `pi-server/drivers/osoyoo_car_driver.py` | **First robot.** |
+| `pi-server/drivers/sim_driver.py` | Fake robot, no hardware needed — for demos/dev without the Pi or robot on hand |
 | `pi-server/drivers/_template_driver.py` | Copy this to add a new robot — see `docs/adding_a_robot.md` |
+| `pi-server/dev_tools/fake_client.py` | Stands in for the Quest headset over the WebSocket protocol — demo/debug the server from a terminal alone |
 | `streaming/` | mediamtx config + the `rpicam-vid` capture script |
 | `pi_setup/` | Raspberry Pi provisioning: install script, systemd services |
-| `docs/` | Architecture doc (with the roadmap), message contract, setup guide, adding-a-robot guide |
+| `docs/` | Architecture doc (with the roadmap), message contract, setup guide, adding-a-robot guide, sprint 1 demo guide |
 | `tests/` | `pi-server` unit tests: mapping layer + driver registry (passing) |
+| `.github/workflows/tests.yml` | CI — runs the full test suite + syntax checks on every push/PR |
 
 ## Getting started
 
@@ -76,7 +81,9 @@ OSOYOO Pi Car hardware, model 2020005500 (first robot; more via drivers/)
 - [x] `pi-server/driver_registry.py` auto-discovery + error isolation, unit tested
 - [x] `quest-client/` robot-select menu + WebXR page implemented (input, networking, video panel)
 - [x] `docs/adding_a_robot.md` written
-- [x] Full test suite passing (19/19 — `pytest tests/pi_server_tests/`)
+- [x] Full test suite passing (20/20 — `pytest tests/pi_server_tests/`)
+- [x] `pi-server/drivers/sim_driver.py` + `pi-server/dev_tools/fake_client.py` — demo the full control loop with no hardware
+- [x] CI (`.github/workflows/tests.yml`) runs the test suite + syntax checks on every push/PR
 - [ ] Motor driver wired to real OSOYOO hardware (`osoyoo_car_driver.py` — pin numbers TODO)
 - [ ] HTTPS serving set up for the Quest page
 - [ ] Video streaming verified end-to-end (mediamtx + rpicam-vid)
