@@ -29,6 +29,25 @@ def test_template_driver_is_not_discovered():
     assert not any("template" in driver_id for driver_id in found)
 
 
+def test_sim_driver_is_discovered_and_runs_without_hardware():
+    # sim_driver.py is the hardware-free demo driver (see dev_tools/fake_client.py) —
+    # it must be discoverable and fully instantiable/drivable on any machine, no Pi needed.
+    found = driver_registry.discover()
+    assert "sim_driver" in found
+    info = found["sim_driver"]
+    assert info.display_name
+
+    instance = info.instantiate()
+    instance.set_axes(0.5, 0.5, 0.0, 0.0)
+    status = instance.get_status()
+    assert status.connected is True
+    assert "honk" in instance.supported_commands()
+    result = instance.command("honk")
+    assert result["ok"] is True
+    instance.stop()
+    instance.shutdown()
+
+
 def test_discovery_does_not_instantiate_drivers():
     # Listing available robots must not touch hardware. osoyoo_car_driver's
     # set_axes() raises NotImplementedError if actually called — discover()

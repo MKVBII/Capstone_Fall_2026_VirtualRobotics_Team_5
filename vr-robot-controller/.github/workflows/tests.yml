@@ -1,0 +1,29 @@
+﻿name: pi-server tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest websockets
+      - name: Run pi-server test suite
+        working-directory: pi-server
+        run: python -m pytest ../tests/pi_server_tests -v
+      - name: Byte-compile every Python file (catches syntax errors early)
+        run: |
+          python -m py_compile pi-server/*.py pi-server/drivers/*.py pi-server/dev_tools/*.py
+      - name: Syntax-check quest-client JS
+        run: |
+          for f in quest-client/js/*.js; do node --check "$f"; done
