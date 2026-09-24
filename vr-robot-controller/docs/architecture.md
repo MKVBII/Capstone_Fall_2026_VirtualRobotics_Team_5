@@ -1,7 +1,7 @@
 # VR Universal Robot Controller — Architecture & Tech Stack
 
 **Capstone project:** VR universal controller for robots operating on a Raspberry Pi
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-17
 **Headset:** Meta Quest 3 (via the Quest Browser's WebXR support — no Unity, no APK, no Developer Mode/sideloading)
 **First test robot:** OSOYOO Robot Car Kit for Raspberry Pi, model **2020005500** ("Pi Car")
 **Deadline:** December 11, 2026
@@ -146,7 +146,7 @@ Matched to the ~12-week window from Sept 15, in the stated priority order: get t
 | 3–4 | `pi-server/server.py` and the WebXR page, wired together with dummy values first, then real controller axes; watchdog tested by killing Wi-Fi mid-drive; wire `osoyoo_car_driver.py`'s TODOs to real GPIO/PCA9685 pins |
 | 5–6 | Tune `mapping.py` by feel: deadzone, curve, single-stick mixing, head-yaw smoothing. Car should be solid and demo-ready by the end of week 6. |
 | 7 | Driver-plugin system: already scaffolded (`driver_registry.py`, the robot-select menu, `docs/adding_a_robot.md`) — this week is verifying it end-to-end on hardware (reselecting the car driver, confirming `shutdown()`/GPIO cleanup actually releases pins) rather than building it from scratch |
-| 8–9 | Add the drone driver (`drivers/<drone>.py` from the template) once hardware is chosen — see the open decision below. Integrate video panel + drive controls; buffer for first-time hardware/wireless debugging |
+| 8–9 | Add the drone driver (`drivers/<drone>.py` from the template) once hardware is chosen — see the open decision below. Integrate video panel + drive controls; buffer for first-time hardware/wireless debugging. Also the window for the config-driven generic drivers described in section 9, if the team decides that bar is worth hitting for grading/demo purposes |
 | 10–12 | Polish, write-up, demo rehearsal (practice switching robots live via the menu), buffer before the deadline |
 
 **Don't skip the isolation step.** Get video working alone. Get motors working alone from a keyboard script on the Pi. Only then connect them. If everything is wired up at once and nothing moves, there's no way to tell which of headset, network, Python, or I2C is at fault.
@@ -159,6 +159,19 @@ Matched to the ~12-week window from Sept 15, in the stated priority order: get t
 - **SG90 servo / head tracking:** currently wired into the design (`set_camera_yaw`); drop it if it's not worth the tuning time.
 - **Which drone:** an SDK-controllable drone (e.g. a DJI Tello EDU, which supports joining an existing Wi-Fi network via its `ap` command instead of hosting its own hotspot — the regular non-EDU Tello can't do this and would need a second Wi-Fi radio on the Pi to stay reachable) is strongly preferred over a custom-built drone with the Pi driving ESCs directly — the latter means building real flight stabilization, a materially bigger and riskier scope for this timeline. Not yet purchased as of this writing.
 - **In-VR robot switching:** currently requires exiting the VR session back to the 2D menu (see `quest-client/js/main.js`'s `session.addEventListener("end", ...)`). An in-headset menu via the WebXR DOM Overlay feature is a possible future upgrade if switching robots without removing the headset turns out to matter for the demo.
+- **Config-driven generic drivers (see section 9):** whether to build `generic_gpio_driver.py`/`generic_tello_driver.py` as config-only onboarding paths for the two robot shapes this project is actually likely to see, on top of the always-available code-based template path. Not started; would slot into weeks 8–9.
+
+## 9. End-of-project bar: hot-swap + low-friction onboarding
+
+Stated explicitly (2026-09-17) as a requirement for what "done" means, separate from any individual robot's hardware bring-up: by the end of the project, (a) switching which robot is active must work live, inside the running application, and (b) adding a new robot must be achievable by following the setup docs and inputting information, without that person needing to be a strong Python programmer.
+
+**(a) is already fully built and verified, today, not just designed.** `selectRobot` over the WebSocket, `driver_registry.py`'s runtime discovery, and the Quest-side robot-select menu together mean switching robots is a menu tap, not a restart or redeploy — see `pi-server/dev_tools/fake_client.py` for a live, hardware-free proof this works end to end (`docs/sprint1_demo.md`).
+
+**(b) is true today in the sense the architecture was built for, with one honest caveat worth the team understanding rather than glossing over.** Following `docs/adding_a_robot.md` today, adding a robot means: copying `_template_driver.py`, setting a couple of string attributes (name/description), and implementing a handful of methods using worked example code from the template. The axis convention, the protocol, and the menu integration require zero code changes and are genuinely "information" (which axis means what, which commands to list). The part that isn't purely information yet is the hardware/SDK-calling code inside those methods (GPIO direction+PWM for a motor, or SDK calls for a drone) — that's inherent to integrating genuinely different hardware, true of any robotics framework, not a gap specific to this one.
+
+The realistic way to close that gap further, without pretending it can go to zero for every possible robot: build one *generic, config-driven* driver per common robot shape this project is actually likely to encounter — a `generic_gpio_driver.py` that reads motor/sensor pin numbers from a small JSON file instead of Python constants (covers "another GPIO+PWM wheeled/tracked robot"), and a `generic_tello_driver.py` that reads WiFi/SSID connection info from JSON (covers "another Tello-family drone"). For a robot that fits one of those shapes, onboarding becomes exactly what was asked for: fill in a config file, no code. A robot that doesn't fit either shape (a boat, a different SDK entirely, a custom flight controller) still goes through the template/code path — that's not a shortfall, it's the same tradeoff every robotics integration layer makes, ROS included.
+
+This hasn't been built yet — flagged here as the concrete plan for hitting the stated bar, sequenced into weeks 8–9 of the roadmap (section 7) alongside the drone work, since the drone driver is a natural first real test of whether the generic-Tello-config approach holds up. Not started before then per the team's current priority order (car first, plugin system usability second, drone third).
 
 ## Sources
 - [OSOYOO Robot Car V2.0 for Raspberry Pi — Introduction](https://osoyoo.com/2020/08/01/osoyoo-raspberry-pi-v2-0-car-introduction/)
