@@ -1,5 +1,8 @@
 websockets>=12.0
-# Uncomment once wiring up real hardware on the Pi (not needed for dev-machine testing):
-# RPi.GPIO
-# adafruit-circuitpython-pca9685
-# adafruit-blinka
+# Hardware libraries for drivers/osoyoo_car_driver.py (same ones OSOYOO's
+# Lesson 1 uses). The markers mean they only install on the Pi (ARM Linux),
+# so `pip install -r requirements.txt` still works on Windows/Mac laptops.
+RPi.GPIO; sys_platform == "linux" and (platform_machine == "aarch64" or platform_machine == "armv7l")
+adafruit-circuitpython-pca9685; sys_platform == "linux" and (platform_machine == "aarch64" or platform_machine == "armv7l")
+adafruit-blinka; sys_platform == "linux" and (platform_machine == "aarch64" or platform_machine == "armv7l")
+ 
