@@ -67,13 +67,30 @@ See `docs/sprint1_demo.md` for the two-terminal live demo.
    aren't in the manual — read them off the board and update
    `pi-server/drivers/osoyoo_car_driver.py`), and confirm the sensor GPIO
    pins already documented in `docs/architecture.md` section 6.
-6. **Set up HTTPS for serving `quest-client/`.** WebXR requires a secure
-   context — plain `http://` will make `navigator.xr` calls silently fail
-   in the Quest Browser. Simplest path: generate a self-signed cert
-   (`openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out
-   cert.pem -days 365`) and serve `quest-client/` with a tool that can use
-   it (e.g. Caddy, or Python's `http.server` wrapped with `ssl`). The
-   browser will show a one-time "unsafe site" warning to click through.
+6. **Set up HTTPS — for BOTH `quest-client/` and `pi-server/server.py`.**
+   WebXR requires a secure context, so `quest-client/` must be served over
+   `https://` or `navigator.xr` calls silently fail in the Quest Browser.
+   Less obviously: `quest-client/js/main.js` also opens its WebSocket as
+   `wss://<PI_HOST>:8765`, not `ws://` — a browser on an `https://` page
+   refuses a plain `ws://` connection (mixed content) — so `server.py`
+   itself needs to terminate TLS on port 8765 too, or the headset will
+   connect to the page but the "Link:" status will never say "connected."
+   One cert covers both:
+   ```
+   mkdir -p certs
+   openssl req -x509 -newkey rsa:2048 -nodes -keyout certs/key.pem -out certs/cert.pem -days 365
+   ```
+   Run that from the repo root (`vr-robot-controller/`) — `pi-server/server.py`
+   already looks for `certs/cert.pem` and `certs/key.pem` there by default
+   (override with the `PI_SERVER_CERT`/`PI_SERVER_KEY` env vars if you'd
+   rather put them elsewhere) and logs which mode it's in on startup. No
+   cert present just means it falls back to plain `ws://` — that's what
+   keeps `dev_tools/fake_client.py` and `docs/sprint1_demo.md` working with
+   zero setup; only the real headset test needs the cert. Serve
+   `quest-client/` itself with any tool that can use the same cert (e.g.
+   Caddy, or Python's `http.server` wrapped with `ssl`). The browser will
+   show a one-time "unsafe site" warning to click through — for both the
+   page and the WebSocket connection.
 7. Install the systemd services from `pi_setup/systemd/` so `pi-server`
    and the streaming pipeline start on boot.
 

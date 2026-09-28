@@ -4,11 +4,15 @@
  * bootup" that lets someone pick which robot to drive, and swap between
  * them (reload the page) for a fast demo without touching a terminal.
  *
- * Config: change PI_HOST below to your Pi's IP/hostname before deploying.
+ * Config: none needed. This page is served from the Pi itself
+ * (quest-client/serve_https.py), so whatever address the Quest typed in
+ * the browser bar IS the Pi's address — PI_HOST just reads it back. If
+ * the Pi's IP changes, nothing here has to be edited.
  */
-const PI_HOST = "192.168.1.X"; // TODO: set to your Pi's IP on the robot's network
+const PI_HOST = location.hostname;
 const WS_URL = `wss://${PI_HOST}:8765`;   // wss:// to match the https:// page (see setup_guide.md)
-const STREAM_URL = `https://${PI_HOST}:8889/car/index.m3u8`; // mediamtx HLS output, adjust path per selected robot
+// mediamtx serves HLS on :8888 (streaming/mediamtx.yml); :8889 is its WebRTC port.
+const STREAM_URL = `https://${PI_HOST}:8888/car/index.m3u8`; // adjust path per selected robot
 
 let renderer, scene, camera;
 let controllerInput, connection, videoPanel;
