@@ -17,6 +17,8 @@ Config: see config.example.json (copy to config.json and edit).
 import asyncio
 import json
 import logging
+import os
+import ssl
 import time
 
 import websockets
@@ -30,6 +32,38 @@ log = logging.getLogger("pi-server")
 HOST = "0.0.0.0"
 PORT = 8765
 WATCHDOG_TIMEOUT_S = 0.3   # stop the robot if no message arrives within this window
+
+# quest-client/js/main.js connects to wss://<PI_HOST>:8765 (not ws://) because
+# the page itself is served over https:// — WebXR requires a secure context,
+# and a browser on an https:// page refuses to open a plain ws:// socket
+# (mixed content). So this server needs to terminate TLS on this port too,
+# using the SAME self-signed cert docs/setup_guide.md has you generate for
+# serving quest-client/ itself. Point these at that cert/key (see setup_guide.md
+# step 6) — by default, a sibling `certs/` folder at the repo root:
+#   openssl req -x509 -newkey rsa:2048 -nodes -keyout certs/key.pem -out certs/cert.pem -days 365
+CERT_FILE = os.environ.get("PI_SERVER_CERT", os.path.join(os.path.dirname(__file__), "..", "certs", "cert.pem"))
+KEY_FILE = os.environ.get("PI_SERVER_KEY", os.path.join(os.path.dirname(__file__), "..", "certs", "key.pem"))
+
+
+def _build_ssl_context():
+    """Returns an SSLContext if a cert/key pair is present, else None.
+
+    None is a deliberate, supported case — it's what keeps `ws://localhost`
+    dev/demo usage (docs/sprint1_demo.md, dev_tools/fake_client.py) working
+    with zero setup. Only the real headset test needs this to succeed."""
+    if os.path.isfile(CERT_FILE) and os.path.isfile(KEY_FILE):
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(CERT_FILE, KEY_FILE)
+        log.info("TLS cert found — serving wss://%s:%d", HOST, PORT)
+        return ctx
+    log.warning(
+        "No cert at %s — serving plain ws://%s:%d. Fine for local/dev testing "
+        "(fake_client.py, sim_driver), but the real Quest headset needs "
+        "wss:// and will fail to connect until a cert is generated — see "
+        "docs/setup_guide.md step 6.",
+        CERT_FILE, HOST, PORT,
+    )
+    return None
 STATUS_PUSH_HZ = 5         # how often to push RobotStatus back to the client
 
 
@@ -192,8 +226,9 @@ async def main():
     server = ControllerServer()
     log.info("Discovered %d driver(s): %s", len(server.available_drivers), list(server.available_drivers))
 
-    async with websockets.serve(server.handle_connection, HOST, PORT):
-        log.info("Listening on ws://%s:%d", HOST, PORT)
+    ssl_context = _build_ssl_context()
+    async with websockets.serve(server.handle_connection, HOST, PORT, ssl=ssl_context):
+        log.info("Listening on %s://%s:%d", "wss" if ssl_context else "ws", HOST, PORT)
         await asyncio.gather(
             server.watchdog_loop(),
             server.status_push_loop(),

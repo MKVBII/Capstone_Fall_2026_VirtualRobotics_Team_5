@@ -10,6 +10,7 @@ protocol described in docs/message_contract.md, live, in front of anyone.
 Usage:
     python3 dev_tools/fake_client.py                  # connects to ws://localhost:8765
     python3 dev_tools/fake_client.py ws://PI_IP:8765   # point at a real server elsewhere
+    python3 dev_tools/fake_client.py wss://PI_IP:8765  # ...once the Pi has certs/ (self-signed is accepted)
 
 Once connected it will:
   1. Print the robot list the server reports (via listRobots).
@@ -33,6 +34,7 @@ arrive, and hands anything else to the main coroutine through a queue.
 import asyncio
 import json
 import math
+import ssl
 import sys
 import time
 
@@ -41,11 +43,25 @@ import websockets
 DEFAULT_URL = "ws://localhost:8765"
 
 
+def _ssl_context_for(url: str):
+    """For wss:// URLs, accept the Pi's self-signed cert (docs/setup_guide.md
+    step 6). Once server.py finds certs/cert.pem it ONLY speaks wss://, so
+    this is what lets the laptop keep testing the real Pi after the headset
+    setup is done. Skipping verification is acceptable for this dev tool on
+    a private router — never copy this into anything production-facing."""
+    if not url.startswith("wss://"):
+        return None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 async def main():
     url = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_URL
     print(f"[fake_client] connecting to {url} ...")
 
-    async with websockets.connect(url) as ws:
+    async with websockets.connect(url, ssl=_ssl_context_for(url)) as ws:
         replies = asyncio.Queue()
         reader_task = asyncio.create_task(_read_loop(ws, replies))
 
