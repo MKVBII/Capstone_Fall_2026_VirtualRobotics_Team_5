@@ -4,7 +4,8 @@ The purpose of this folder is to hold any test code developed over the course of
 
 # Tests and Instructions
 
-1. Connection Test: Headset to router to RBP and vice versa
+1. Connection Test: Ensuring messages can travel from headset to    router to RBP and vice versa
+
    a: Video Path:
       - SSH into the RBP and run the following:
         ///
@@ -25,3 +26,13 @@ The purpose of this folder is to hold any test code developed over the course of
         ///
 
    b: Controls:
+      - Ensure connection_test.py and index.html are both on the RBP and run both:
+
+      - In one terminal: 'python3 connection_test.py'
+      - In another terminal: 'python3 -m http.server 8765'
+      - Then in the quest browser: 'http://<IP address for the RBP>:8765
+      
+        You should see:
+          In the headset: "reply: Wagwan from di Meta Quest"
+
+          In the RBP terminal: "got: Wagwan from di Meta Quest"
