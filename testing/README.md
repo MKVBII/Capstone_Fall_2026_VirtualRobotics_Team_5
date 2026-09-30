@@ -4,29 +4,24 @@ The purpose of this folder is to hold any test code developed over the course of
 
 # Tests and Instructions
 
-1. The Raspberry Pi can receive and respond to messaged
-    - Download server.c onto either the Raspberry Pi or a machine of your choice (ensure said machine has gcc installed) 
-      and then client.c onto the other machine.
+1. Connection Test: Headset to router to RBP and vice versa
+   a: Video Path:
+      - SSH into the RBP and run the following:
+        ///
+          cd
+          echo "hello from Pi"
+          python3 -m http.server 8000
+        ///
 
-    - compile and run the server code (gcc <server.c> -o <name-of-compiled-code>, then ./<name-of-compiled-code>)
-      Ex: gcc server.c -o server, then ./server
+      - Turn on the Meta Quest and ensure it's on the same network as the RBP (we  used a router)
+      - On the Meta Quest's browser, search "http://<IP address of the Pi>:8000"
 
-      You should see something like:
-      "Campus Server - PID: 1834
-      Waiting for a client on port 8080..."
+        You should see the text: "hello from Pi" and something like the following on the RBP's terminal:
+        ///
+          Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+          192.168.0.58 - - [29/Sep/2026 19:20:32] "GET / HTTP/1.1" 200 -
+          192.168.0.58 - - [29/Sep/2026 19:20:32] code 404, message File not found
+          192.168.0.58 - - [29/Sep/2026 19:20:32] "GET /favicon.ico HTTP/1.1" 404 -
+        ///
 
-    - compile and run the client code appening the IP address of the machine you're runnning the server code on (./client <IP-address>).
-      Ex: ./client 0.0.0.0
-
-      You should see something like:
-      "Student Client -=PID: 46102
-       Connected to server <0.0.0.0:8000
-       Message sent.
-       Server response: . . .>"
-
-       And then on the server side you should now see:
-       "Campus Server - PID: 1834
-        Waiting for a client on port 8080...
-        Client connected.
-        Received: Student requests course schedule.
-        Response sent."
+   b: Controls:
