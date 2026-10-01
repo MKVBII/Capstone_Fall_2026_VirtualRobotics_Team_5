@@ -1,0 +1,73 @@
+<!-- 
+--- This code goes on the Raspberry Pi ---
+
+Runs in the Meta Quest's browser and proves the Websocket control path
+works from the headset's end:
+    1. Opens a Websocket connection back to the Pi
+    2. Sends one message
+    3. Displays whatever the Pi sends back
+
+
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset = "utf-8">
+    <!-- ^ render at device's width rather than some default desktop width -->
+    <meta name = "viewport" content = "width = device-width, initial-scale = 1">
+    <title> Pi Connection Test </title>
+</head>
+
+<body style = "font-size: 2em; font-family: sans-sarif; padding: 1em;">
+
+    <!-- status display -->
+    <div id = "out"> connecting . . .</div>
+    <script>
+        // referece to the div above so we can change its text
+        const out = document.getElementById("out");
+
+        // open the websocket connection
+        const websocket = new WebSocket("ws://" + location.hostname + ":8765")
+
+        /*
+            The following code is event driven. Rather than waiting in a loop for
+            a connection, we register functions the browser calls when something happens.
+            Opening a connections costs time so the code after this point runs automatically
+            while the connection is being established.
+        */
+        websocket.onopen = () => {
+            out.textContent = "websocket hath been opened";
+
+            // send a message (this is where the joystick values will go in the larger code)
+            websocket.send("Wagwan from di Meta Quest")
+        };
+
+        // runs every time the RBP sends something back
+        // 'e' is an event object, e.data holds the message text
+        websocket.onmessage = (e) => {
+            out.textContent = "reply: " + e.data;
+        };
+
+        
+        /*
+            - runs if the connection fails
+            - for security reasons the browser doesn't report why,
+              if error comes up check the following:
+                * is connection_test.py running?
+                * is the Meta Quest on the same network?
+                * is the port number correct (does it match on
+                  the browser, in connection_test.py, and in this file)?
+        */
+        websocket.onerror = () => {
+            out.textContent = "error";
+        };
+
+        // runs when the connection ends, appending " now closing" after whatever
+        // text came before it
+        websocket.onclose = () => {
+            out.textContent += " now closing";
+        };
+
+    </script>
+</body>
+</html>
