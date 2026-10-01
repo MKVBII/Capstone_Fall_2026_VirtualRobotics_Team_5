@@ -27,7 +27,7 @@ works from the headset's end:
         const out = document.getElementById("out");
 
         // open the websocket connection
-        const websocket = new WebSocket("websocket://" + location.hostname + ":8765")
+        const websocket = new WebSocket("ws://" + location.hostname + ":8765")
 
         /*
             The following code is event driven. Rather than waiting in a loop for
