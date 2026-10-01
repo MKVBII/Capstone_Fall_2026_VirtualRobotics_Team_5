@@ -1,95 +1,41 @@
-# VR Universal Robot Controller
+# VR Robot Controller: OSOYOO Pi Car
 
-Capstone project: a **Meta Quest 3** WebXR page (no Unity, no APK, no
-Developer Mode) that drives robots running on a Raspberry Pi, through a
-runtime driver-plugin system and a small WebSocket JSON contract. Drop a
-driver file for a new robot into `pi-server/drivers/`, pick it from the
-in-headset menu, and it runs — no other code changes. The first physical
-robot this is being built and tested against is the **OSOYOO Robot Car
-Kit for Raspberry Pi, model 2020005500** (2-wheel differential drive,
-L298N + PCA9685/PWM HAT motor driver, CSI camera, ultrasonic +
-line-tracking sensors, SG90 servo). This kit supports Raspberry Pi
-2/3/3A+/4 only — no Pi 5. A drone is next, once the car is solid — see
-the roadmap.
+Team 5 capstone (Fall 2026): drive a Raspberry Pi robot car from a Meta Quest 3
+headset, with live video from the car's camera.
 
-**Deadline: December 11, 2026.**
+**Current focus:** the OSOYOO Pi Car (model 2020005500) only, built and tested
+one step at a time.
 
-This repo is the project "bible" — the structure below is the agreed
-architecture and every new piece of work should land in the folder that
-already exists for it rather than inventing a new top-level location.
-
-Full architecture writeup, including why this design was chosen over an
-earlier ROS 2 + Unity version, the driver-plugin system, and the
-week-by-week roadmap to Dec 11: [`docs/architecture.md`](docs/architecture.md)
-
-**Adding a robot? Start here:** [`docs/adding_a_robot.md`](docs/adding_a_robot.md)
-
-**No robot/Pi in hand? You can still demo the whole thing:** [`docs/sprint1_demo.md`](docs/sprint1_demo.md) — runs the full control loop with a simulated robot, on any laptop.
-
-## How it fits together
+## Folder
 
 ```
-Meta Quest 3 Browser (WebXR, quest-client/)
-  #robot-menu: pick a robot, rescan drivers/, per-robot command buttons
-        │  WebSocket :8765, JSON        (control + robot menu + status)
-        │  HLS :8888 / WebRTC :8889     (video, via mediamtx)
-        ▼
-Raspberry Pi — Raspberry Pi OS Bookworm (pi-server/)
-  driver_registry.py → auto-discovers drivers/*.py at runtime
-  server.py → mapping.condition_axis() (universal signal conditioning)
-            → whichever driver is currently selected (drivers/osoyoo_car_driver.py, ...)
-  streaming/ → rpicam-vid → mediamtx (CSI camera → HLS/WebRTC)
-        │  GPIO (L298N direction) / I2C (PCA9685 PWM) / whatever the active driver needs
-        ▼
-OSOYOO Pi Car hardware, model 2020005500 (first robot; more via drivers/)
+vr-robot-controller/
+└── robot-car/
+    ├── SETUP.md            start here: Pi setup + tests, step by step
+    ├── motor_test.py       Test 1: wheels move
+    └── camera_server.py    Test 2: live camera in a laptop browser
 ```
 
-## Repo layout
+## Progress
 
-| Path | What lives here |
-|---|---|
-| `quest-client/` | WebXR page — robot-select menu, controller/head input, WebSocket networking, video panel |
-| `pi-server/server.py` | WebSocket server: control messages, watchdog, status push, robot switching |
-| `pi-server/driver_registry.py` | Auto-discovers `drivers/*.py` at runtime — the "upload a file, it runs" mechanism |
-| `pi-server/mapping.py` | `condition_axis` (deadzone/curve/clamp) + wheeled-robot mixing helpers — pure functions, unit tested |
-| `pi-server/robot_driver_base.py` | The universal `RobotDriver` interface (wheeled + flying/boat-like) every robot implements |
-| `pi-server/drivers/osoyoo_car_driver.py` | **First robot.** |
-| `pi-server/drivers/sim_driver.py` | Fake robot, no hardware needed — for demos/dev without the Pi or robot on hand |
-| `pi-server/drivers/_template_driver.py` | Copy this to add a new robot — see `docs/adding_a_robot.md` |
-| `pi-server/dev_tools/fake_client.py` | Stands in for the Quest headset over the WebSocket protocol — demo/debug the server from a terminal alone |
-| `streaming/` | mediamtx config + the `rpicam-vid` capture script |
-| `pi_setup/` | Raspberry Pi provisioning: install script, systemd services |
-| `docs/` | Architecture doc (with the roadmap), message contract, setup guide, adding-a-robot guide, sprint 1 demo guide |
-| `tests/` | `pi-server` unit tests: mapping layer + driver registry (passing) |
-| `.github/workflows/tests.yml` | CI — runs the full test suite + syntax checks on every push/PR |
+| Test | What it proves | Status |
+|---|---|---|
+| 1. `motor_test.py` | Motors, wiring, PWM HAT, battery | Passed |
+| 2. `camera_server.py` | Camera works and streams over Wi-Fi | Next |
+| 3. Camera in the headset | Video reaches the Quest in VR | Not built yet |
+| 4. Joystick driving | Quest thumbstick drives the car | Not built yet |
 
-## Getting started
+Each new test gets its own file(s), added only after the previous test passes.
 
-1. Read `docs/architecture.md` first — it's the source of truth for design decisions, including why ROS 2/Unity were dropped and how the driver-plugin system works.
-2. Pi side: follow `docs/setup_guide.md`, then `pi_setup/install.sh`.
-3. Start `pi-server/server.py` and the streaming pipeline (`streaming/start-stream.sh` + mediamtx).
-4. Quest side: serve `quest-client/` over HTTPS from the Pi (see setup guide — WebXR requires a secure context), open it in the Quest Browser.
-5. Pick a robot from the menu, tap "Enter VR."
-6. First integration milestone: drive the OSOYOO car's base end-to-end from the headset before adding video/sensors — see the roadmap for the full build order.
-7. Adding the drone (or any other robot) later: `docs/adding_a_robot.md`.
+## The earlier "universal controller" version
 
-## Status
+The first version of this repo was built to control many kinds of robots
+(driver plugins, robot-select menu). It was set aside to focus on getting
+the car working. It's saved in git under the tag **`universal-version`**. To
+look at it or bring a piece back:
 
-- [x] `pi-server/mapping.py` implemented and unit tested
-- [x] `pi-server/server.py` WebSocket server + watchdog implemented
-- [x] `pi-server/robot_driver_base.py` generalized for wheeled + flying robots
-- [x] `pi-server/driver_registry.py` auto-discovery + error isolation, unit tested
-- [x] `quest-client/` robot-select menu + WebXR page implemented (input, networking, video panel)
-- [x] `docs/adding_a_robot.md` written
-- [x] Full test suite passing (20/20 — `pytest tests/pi_server_tests/`)
-- [x] `pi-server/drivers/sim_driver.py` + `pi-server/dev_tools/fake_client.py` — demo the full control loop with no hardware
-- [x] CI (`.github/workflows/tests.yml`) runs the test suite + syntax checks on every push/PR
-- [ ] Motor driver wired to real OSOYOO hardware (`osoyoo_car_driver.py` — pin numbers TODO)
-- [ ] HTTPS serving set up for the Quest page
-- [ ] Video streaming verified end-to-end (mediamtx + rpicam-vid)
-- [ ] First real drive test on hardware
-- [ ] Ultrasonic + line-tracking sensors wired into `get_status()`
-- [ ] Camera pan servo (`set_camera_yaw`) wired to real hardware
-- [ ] Driver-plugin system verified end-to-end on real hardware (runtime robot switching + GPIO cleanup on `shutdown()`)
-- [ ] Drone hardware chosen (see `docs/architecture.md` open decisions — leaning SDK-controllable, e.g. Tello EDU)
-- [ ] Drone driver written from `_template_driver.py`
+```powershell
+git checkout universal-version -- vr-robot-controller/pi-server
+```
+
+(Replace `pi-server` with whichever folder you need.)

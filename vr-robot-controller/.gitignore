@@ -1,20 +1,17 @@
-# Python
+# Files git should never track.
+
+# Python's compiled caches - recreated automatically, differ per machine.
 __pycache__/
 *.pyc
-.venv/
-.pytest_cache/
 
-# mediamtx binary + downloaded release archives (platform-specific, don't commit)
-streaming/mediamtx
-streaming/mediamtx_*.tar.gz
-streaming/mediamtx_*.zip
-
-# TLS certs generated for local HTTPS testing (see docs/setup_guide.md) — never commit these
+# Security certificates/keys (needed later for the headset's https page).
+# Secret keys must never be committed to GitHub.
 *.pem
 *.key
 *.crt
 
-# OS / editor
+# Operating system / editor clutter.
 .DS_Store
+Thumbs.db
 .vscode/
 *.swp
