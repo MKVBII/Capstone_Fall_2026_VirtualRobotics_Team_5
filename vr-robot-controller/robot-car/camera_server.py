@@ -76,12 +76,12 @@ PORT = 8000
 # ^ The "door number" the browser connects to: http://PI_IP:8000
 #   8000 is a common choice for test web servers; any free number works.
 
-WIDTH, HEIGHT = 640, 480
+WIDTH, HEIGHT = 1280, 720
 # ^ Picture size in pixels. 640x480 is a safe start: sharp enough to steer
 #   by, and each JPEG is only ~30-50 KB, which ordinary Wi-Fi handles
 #   easily. Try 1280x720 once this works, if the Wi-Fi keeps up.
 
-FRAMES_PER_SECOND = 15
+FRAMES_PER_SECOND = 30
 # ^ 15 pictures a second looks like smooth-enough video for driving and
 #   uses roughly 3-6 megabits/s of Wi-Fi. Raise to 20-30 if it stays smooth.
 
