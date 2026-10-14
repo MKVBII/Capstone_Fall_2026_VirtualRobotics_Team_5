@@ -1,8 +1,8 @@
 # Robot Car Setup Guide (OSOYOO Pi Car, model 2020005500)
 
 This guide takes a fresh Raspberry Pi to a car whose **wheels move** and whose
-**camera shows live video in a laptop browser**. The VR headset and joystick
-driving come next, one file at a time, after these two tests pass.
+**camera shows live video in a laptop browser and in the Quest headset**.
+Joystick driving comes next, one file at a time, after these tests pass.
 
 **Rule for the whole project: test one layer at a time.** Each test below
 adds exactly one new thing. If a test fails, the problem is in that one new
@@ -17,6 +17,12 @@ robot-car/
 ├── SETUP.md            this guide
 ├── motor_test.py       Test 1: spins each wheel briefly
 └── camera_server.py    Test 2: live camera in a browser
+                        Test 3: the same camera on a floating screen
+                                in the Quest headset (/xr page)
+└── static/
+    └── three.module.min.js   3D library for the headset page (Three.js,
+                              MIT licence), served by the Pi so the
+                              headset doesn't need internet
 ```
 
 Nothing else is needed yet. More files are added only when the next test
@@ -226,26 +232,111 @@ forward.
    cd ~/robot-car
    python3 camera_server.py
    ```
-   It prints `Camera on: 640x480 at 15 fps`. Then, every 5 seconds, it prints
-   `camera running: 15.0 frames/s, NN KB per frame`. That line means the camera
-   is working, even before you open a browser.
-   (A red "development server" warning also appears. It's normal; ignore it.)
+   It prints `Sensor mode: ... full view` (the camera is using its whole
+   view, not a zoomed-in crop), `Camera on: 1024x768 at 15 fps`, and the two
+   addresses it serves:
+   ```
+   Laptop:  http://<this Pi's IP>:8000
+   Headset: https://<this Pi's IP>:8443/xr   (mixed reality)
+   ```
+   Then, every 5 seconds, it prints `camera running: 15.0 frames/s, NN KB per
+   frame`. That line means the camera is working, even before you open a browser.
+   The very first run also prints `Creating a self-signed https certificate`
+   and makes `cert.pem` and `key.pem` in the same folder. They're reused
+   after that, and `.gitignore` keeps them off GitHub.
 2. On your laptop, open a browser and go to:
    ```
    http://picar.local:8000
    ```
-   or `http://PI_IP:8000` using the IP from Step 2.
-3. You should see live video. Wave a hand in front of the camera to judge
-   the delay.
-4. **Ctrl+C** in the SSH window stops it and releases the camera.
+   or `http://PI_IP:8000` using the IP from Step 2. (Plain http, no warning.)
+3. You should see live video filling the window. Wave a hand in front of
+   the camera to judge the delay.
+4. **Tap or click the video** for full screen (hides the address bar). Tap
+   again, or press Esc, to leave full screen.
+5. **Ctrl+C** in the SSH window stops it and releases the camera.
 
 | What you see | What it means |
 |---|---|
 | Browser can't connect | Check that the laptop is on the same Wi-Fi, try the IP instead of `picar.local`, and check that `camera_server.py` is still running. |
+| `Address already in use` when starting | Another copy of `camera_server.py` (maybe an older one) is still running. Stop it with `pkill -f camera_server`, then start again. |
 | Page loads but the picture is blank | Look at the SSH window. If there are no "camera running" lines, the camera isn't delivering frames; re-check Step 4. |
 | Picture is upside down | In `camera_server.py`, set `ROTATE_180 = True`, copy it over again (Step 5), and restart. |
+| Picture looks zoomed in | Keep `WIDTH, HEIGHT` a 4:3 size (640x480, 1024x768, 1280x960). Widescreen sizes such as 1280x720 make the camera crop to the middle of its sensor. Check that the start-up output says `Sensor mode: ... full view`. |
 | "Camera in use" / "Device busy" error | Another program has the camera. Stop it, or reboot. |
 | Video is choppy or delayed | Check the Pi's CPU with `htop`, or move closer to the Wi-Fi router. Lowering `FRAMES_PER_SECOND` or `WIDTH, HEIGHT` in `camera_server.py` also helps. |
+
+## Test 3: Camera in the headset (mixed reality)
+
+Same program as Test 2; nothing new to install. The `/xr` page shows the
+camera as a floating screen in your real room: the Quest's passthrough
+shows your surroundings, and the screen stays where it was put, so you can
+look around and look back at it. No browser window, no address bar.
+
+**One-time Quest setting.** Browsers only allow mixed reality on "secure"
+pages, and plain `http://` to the Pi doesn't count unless you tell the Quest
+browser to trust it. Do this once per headset (and again if the Pi's IP
+address changes):
+
+1. In the Quest **Browser**, go to `chrome://flags`.
+2. Search **insecure**. Find **Insecure origins treated as secure** and set
+   it to **Enabled**.
+3. In the text box under it, type the Pi's address with `http://` and port
+   8000, for example `http://192.168.1.50:8000`.
+4. Tap outside the box, then tap **Relaunch** at the bottom.
+5. Go back to `chrome://flags` and check the setting and address were saved.
+
+**Then, each time:**
+
+1. Start `camera_server.py` on the Pi, exactly as in Test 2.
+2. In the Quest Browser, go to:
+   ```
+   http://PI_IP:8000/xr
+   ```
+   (Typing the IP is more reliable than `picar.local` on the Quest. The link
+   at the bottom of the laptop page also leads here.)
+   *Backup if the setting above won't work:* `https://PI_IP:8443/xr`. The
+   first time, it warns that the connection isn't private; tap **Advanced**,
+   then **Proceed to … (unsafe)**.
+3. You'll see a preview of the video and a blue **Enter mixed reality**
+   button. Tap it. If the Quest asks for permission to use your space, allow it.
+4. The browser disappears and the video floats about 1.8 m in front of you.
+   A green **LIVE** tag sits under it; it turns red **NO VIDEO** if pictures
+   stop arriving for 1 second.
+5. **Squeeze either grip button** to bring the screen back in front of
+   wherever you're facing.
+6. To leave, press the **Meta button** on the right controller.
+
+The page's 3D library comes from the Pi (`static/three.module.min.js`), so
+the headset doesn't need internet access. Copy the whole `robot-car`
+folder, including `static/`, to the Pi.
+
+**Latency, sharpness and motion blur** are set near the top of
+`camera_server.py`:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `FRAMES_PER_SECOND` | 60 | Smoother, fresher pictures. The camera uses as many as it can in full view (the start-up log says how many). Set 30 if the video stutters. |
+| `QUALITY` | `"HIGH"` | Detail per picture. `"VERY_HIGH"` is sharper; `"MEDIUM"` if video stutters on your Wi-Fi. |
+| `SHORT_EXPOSURE` | `True` | Less motion blur; can look grainier in dim rooms. |
+| `SHUTTER_US` | `None` | Strongest motion-blur fix: a fixed shutter time. Try `8000` (1/125 s) or `4000` (1/250 s). Needs a well-lit room, or the picture gets grainy. |
+| `WIDTH, HEIGHT` | 1024, 768 | 1280, 960 is sharper but needs more Wi-Fi; 640, 480 allows the highest frame rate. Keep it 4:3. |
+
+More light is the single biggest help for motion blur: in a bright room the
+camera can use a short shutter without the picture getting grainy.
+
+The Wi-Fi matters as much as the settings: put the Pi and Quest on the
+**5 GHz** network, close to the router (the Pi 3B and older only do 2.4 GHz).
+
+| What you see | What it means |
+|---|---|
+| Button says "Mixed reality blocked on http://" | The one-time Quest setting isn't on, or the address in its box doesn't exactly match (check `http://`, the IP and `:8000`, with no `/xr` on the end). The page shows the exact address to type. |
+| "This site can't provide a secure connection" | You typed `https://` with port 8000. Use `http://` with 8000, or `https://` with **8443**. |
+| Page never finishes loading | Make sure the Pi has the latest `camera_server.py` (Step 5) and restart it. Older versions could freeze over https. |
+| Button says "Mixed reality not available here" | You're not in the Quest browser, or it's out of date. Update the headset's software. |
+| Button says "Problem - see below" | The text under it says what failed. Usually the `static` folder is missing on the Pi: copy the whole `robot-car` folder again (Step 5). |
+| Preview shows video, but the screen in the headset is black | Leave mixed reality and look at the preview. If that's frozen too, it's the stream (see Test 2). |
+| Tag says **NO VIDEO** | The Pi stopped sending pictures, or the Wi-Fi dropped. The page reconnects by itself every second. |
+| Screen is too big, small, close or far | Change `PANEL_WIDTH`, `PANEL_DISTANCE` or `PANEL_DROP` near the top of the page's script in `camera_server.py`. |
 
 ---
 
@@ -263,9 +354,7 @@ forward.
 
 Each step gets its own file(s) and its own test, after the previous one passes:
 
-1. **Test 3: camera in the headset.** Serve the page over https (the Quest
-   requires it for VR) and show the video on a floating screen in VR.
-2. **Test 4: joystick driving.** Send the Quest thumbstick to the Pi over a
+1. **Test 4: joystick driving.** Send the Quest thumbstick to the Pi over a
    WebSocket and drive the motors. It reuses `motor_test.py`'s exact pins,
    library (gpiozero) and 1000 Hz setting, plus the forward direction you
    recorded in Test 1.
