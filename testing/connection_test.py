@@ -2,6 +2,7 @@ import asyncio # Python livrary for handling many things at once without
                # using threads
 
 import websockets #Python websocket library
+import ssl
 
 # --- This code goes on the Raspberry Pi ---
 
@@ -29,7 +30,9 @@ async def main():
     # * 'async with': means "set this up, run the indented block, shut
     #                 the serverr down cleanly when the block ends even
     #                 if something crashed"
-    async with websockets.serve(handler, "0.0.0.0", 8765):
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain("cert.pem", "key.pem")
+    async with websockets.serve(handler, "0.0.0.0", 8765, ssl=ssl_context):
         print("listening on 8765")
         await asyncio.Future() # makes it such that the server runs until
                                # ctrl + c is pressed

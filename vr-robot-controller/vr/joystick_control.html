@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+
+<!-- 
+This code goes on the Pi but is technically ran by the Quest
+The Pi hosts it and the Quest accesses it via the browser 
+and runs it
+-->
+
+<html>
+<head>
+    <meta charset = "utf-8">
+    <meta name = "viewport" content = "width = device-width, initial-scale = 1">
+    <title>Quest Control</title>
+</head>
+
+<body style = "font-size:1.6em; font-family:sans-serif; padding:1em; background:#111; color:#eee;">
+    <button id = "enter" style = "font-size:1em; padding:0.6em 1.2em;">Enter VR</button>
+
+    <!-- status lines -->
+    <div id = "status" style = "margin-top:1em;">starting . . .</div>
+    <div id = "axes" style = "margin-top:0.5em; font-family:monospace;">-</div>
+    
+    <script>
+
+        // how many times to send per second (*slower than the headset's default refresh rate
+        // since the motors can't respond that fast anyway).
+        const SEND_HZ = 25;
+        const SEND_INTERVAL_MS = 1000 / SEND_HZ;
+
+        // deadzone (how far the stick has to move before it's counted as intentional)
+        const DEADZONE = 0.12;
+
+        // response curve component, fine control near the center, full spead near the end
+        const CURVE = 2.0;
+
+        /* --- elements and state --- */
+        const statusEl = document.getElementById("status");
+        const axesEl = document.getElementById("axes");
+        const enterBtn = document.getElementById("enter");
+
+        let ws = null; // websocket connection
+        let lastSent = 0; // timestamp of the last message for throttling
+
+        /* --- websocket --- */
+        function connect() {
+
+            ws = new WebSocket("wss://" + location.hostname + ":8765");
+            ws.onopen = () => {statusEl.textContent = "socket open: tap 'Enter VR'";};
+            ws.onerror = () => {statusEl.textContent = "socket error";};
+            
+            // try to reconnect automatically if the link drops
+            ws.onclose = () => {
+                statusEl.textContent = "socket closed, retrying";
+                setTimeout(connect, 1000);
+            };
+        }
+
+        connect();
+
+    /*  --- mapping --- */
+
+        /* turn axis reads into sendable messages */
+        function condition(value) {
+            const sign = Math.sign(value);
+            const magnitude = Math.abs(value);
+
+            if (magnitude < DEADZONE) {
+                return 0;
+            }
+
+            const rescaled = (magnitude - DEADZONE) / (1 - DEADZONE);
+            return sign * Math.pow(rescaled, CURVE);
+        }
+
+        /* --- entering XR --- */
+        enterBtn.onclick = async () => {
+
+        // make sure immersive VR is availble (required to make the joystick values sendable)
+        if (!navigator.xr || !(await navigator.xr.isSessionSupported("immersive-vr"))) {
+            statusEl.textContent = "!!! immersive VR not supported here !!!";
+            return;
+        }
+
+        const session = await navigator.xr.requestSession("immersive-vr");
+
+        // a 'canvas' so that the WebXR session has somewhere to draw the frames
+        // *needed even if you're drawing nothing
+        // TODO: WHERE THE VIDEO PANEL WILL GO
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl", {xrCompatible: true});
+        session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
+
+        // reference space defining what positions are measured against
+        // 'local' means relative to where the headset was when the session started
+        // *not used for joysticks but required to request frames
+        const refSpace = await session.requestReferenceSpace("local");
+
+        statusEl.textContent = "in VR: try moving the sticks";
+
+        session.requestAnimationFrame(onFrame);
+
+        function onFrame(time, frame) {
+            // ask for the next frame right away, keeps the loop going for as long as the session lives
+            session.requestAnimationFrame(onFrame);
+
+            // default to centered if the controller isn't found
+            // *it usually either went to sleep or was set down
+            let lx = 0, ly = 0, rx = 0, ry = 0;
+
+            // on Quest controllers, thumbstick axes are axes[2] and axes[3] not 0 and 1,
+            // those are reserved for a touchpad that we don't have
+            // also, y is inverted, pushing it forward gives negative values, not sure why,
+            // we can flip it on the Pi
+            for (const source of frame.session.inputSources) {
+                const pad = source.gamepad;
+                if (!pad || pad.axes.length < 4) {
+                    continue;
+                }
+
+                if (source.handedness === "left") {
+                    lx = condition(pad.axes[2]);
+                    ly = condition(pad.axes[3]);
+                } else if (source.handedness === "right") {
+                    rx = condition(pad.axes[2]);
+                    ry = condition(pad.axes[3]);
+                }
+            }
+
+            // show the values in the headset
+            axesEl.textContent = 'lx ${lx.toFixed(2)} ly ${ly.toFixed(2) rx ${rx.toFixed(2)} ry ${ry.toFixed(2)}';
+
+            /* --- throttling --- */
+            if (time - lastSent < SEND_INTERVAL_MS) {
+                return;
+            }
+            lastSent = time;
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({lx, ly, rx, ry}));
+            }    
+        }
+
+        // fires when the session ends (user exits the VR, takes the headset off, etc.)
+        session.onend = () => {
+            statusEl.textContent = "session ended";
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({lx: 0, ly: 0, rx: 0, ry: 0}));
+            }
+        };
+    };
+    </script>
+</body>
+</html>     
