@@ -2,12 +2,16 @@
 
 The purpose of this folder is to hold any test code developed over the course of the project.
 
+# Helpful Tips:
+    - SSHing into the RBPi:
+        open a terminal and 
+
 # Tests and Instructions
 
-1. Connection Test: Ensuring messages can travel from headset to    router to RBP and vice versa
+1. Connection Test: Ensuring messages can travel from headset to router to RBP and vice versa
 
    a: Video Path:
-      - SSH into the RBP and run the following:
+      - SSH into the RBP and run the following (see above instructions):
         ///
           cd
           echo "hello from Pi"
@@ -37,3 +41,8 @@ The purpose of this folder is to hold any test code developed over the course of
           In the headset: "reply: ack: Wagwan from di Meta Quest"
 
           In the RBP terminal (the one in which you ran 'python3 connection_test.py'): "got: Wagwan from di Meta Quest"
+
+2. Motors (Wheels): making sure that the hardware involved in turning the wheels is functional
+
+    - SSH into the RBPi
+    - run 
