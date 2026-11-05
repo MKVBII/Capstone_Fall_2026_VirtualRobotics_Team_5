@@ -1,7 +1,15 @@
-import asyncio # Python livrary for handling many things at once without
+"""
+connection_test.py - ARCHIVED early test (September 2026). Kept for history.
+
+Proved the WebSocket control path works: Quest -> router -> Pi and back.
+Replaced by drive_server.py, which listens on the same port (8765).
+Ran on the Pi, next to cert.pem/key.pem:   python3 connection_test.py
+Paired with wstest.html (opened in the Quest browser).
+"""
+import asyncio # Python library for handling many things at once without
                # using threads
 
-import websockets #Python websocket library
+import websockets # Python websocket library
 import ssl
 
 # --- This code goes on the Raspberry Pi ---
@@ -28,7 +36,7 @@ async def main():
     #         browser matches)
 
     # * 'async with': means "set this up, run the indented block, shut
-    #                 the serverr down cleanly when the block ends even
+    #                 the server down cleanly when the block ends even
     #                 if something crashed"
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ssl_context.load_cert_chain("cert.pem", "key.pem")

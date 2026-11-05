@@ -15,3 +15,8 @@ __pycache__/
 Thumbs.db
 .vscode/
 *.swp
+
+# Made on the Pi while it runs: session logs (download them from the start
+# screen) and the saved website/headset settings.
+robot-car/logs/
+robot-car/settings.json

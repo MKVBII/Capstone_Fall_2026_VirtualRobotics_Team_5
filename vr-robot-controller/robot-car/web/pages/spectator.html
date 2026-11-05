@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!--
+  spectator.html - for an audience: a mirror of what the driver sees in the
+  headset. The video screen, its coloured border, the alert banner, the
+  status tags, the quick-button bar, the dashboard (or strip), and the help
+  card and settings panel when the driver opens them, laid out like in the
+  headset and scaled to fit the window. View-only: it sends no controls,
+  and opening or closing it never affects driving.
+
+  Served by:  camera_server.py at  /spectator   (put it on a projector or TV)
+  Code:       ../css/site.css (look), ../js/spectator.js (draws with
+              ../js/hud.js and ../js/panels.js, exactly like the headset)
+  Readings:   over http, from drive_server.py's view-only port (no
+              certificate needed); over https, from the normal port.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spectator - VR Robot Controller</title>
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    /* The whole page fits the window: header on top, the mirror below. */
+    html, body { height: 100%; }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+    .hide-header .site-header { display: none; }
+    #driver-state { font-size: 14px; }
+
+    /* The "room" behind the panels, like the passthrough view. */
+    #stage { flex: 1; min-height: 0; position: relative; overflow: hidden; background: #4b5058; }
+    :root[data-theme="light"] #stage { background: #c3c7ce; }
+
+    /* The mirror is laid out in "world" pixels (500 per metre, like the
+       headset), then scaled as one piece to fit #stage (spectator.js). */
+    #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+    #world > * { position: absolute; }
+    /* The coloured frame is drawn outside the picture (box-shadow), so the
+       picture keeps the camera's exact shape. */
+    #screen { background: #000; border-radius: 4px; box-shadow: 0 0 0 12px var(--bezel, #0b0d10); }
+    #screen img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #world canvas { display: block; }
+    .tag { font: 600 15px system-ui, sans-serif; color: #e8eaed; display: flex; align-items: center;
+           gap: 7px; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+    .tag::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--dot, #8e8e93); }
+
+    /* A notice in the middle when the readings link isn't up. */
+    #notice { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 5;
+              max-width: min(640px, calc(100% - 32px)); padding: 12px 16px; border-radius: 12px;
+              background: var(--surface); border: 1px solid var(--border); color: var(--text);
+              box-shadow: 0 8px 30px rgba(0,0,0,.3); font-size: 15px; line-height: 1.45; display: none; }
+    #notice a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">VR Robot Controller</a>
+    <span class="muted" id="robot-name">Spectator view</span>
+    <span class="muted" id="driver-state"></span>
+    <nav>
+      <a href="/">Start</a>
+      <a href="/spectator" aria-current="page">Spectator</a>
+    </nav>
+    <button class="btn" id="full" type="button">Full screen</button>
+    <button class="theme-toggle" type="button"></button>
+  </header>
+
+  <div id="stage">
+    <div id="notice" role="status"></div>
+    <div id="world">
+      <div id="screen"><img src="/stream" alt="Live camera picture from the robot"></div>
+      <canvas id="strip" width="1920" height="144"></canvas>
+      <canvas id="banner" width="1400" height="110" aria-live="polite"></canvas>
+      <div class="tag" id="tag-video"></div>
+      <div class="tag" id="tag-rear"></div>
+      <div class="tag" id="tag-controls"></div>
+      <canvas id="bar" width="1100" height="150"></canvas>
+      <canvas id="dash" width="1600" height="520" aria-label="Robot readings"></canvas>
+      <canvas id="help" width="1100" height="1400" aria-label="Controls help card"></canvas>
+      <canvas id="settings" width="1600" height="1100" aria-label="Settings panel"></canvas>
+    </div>
+  </div>
+
+  <script type="module" src="/js/spectator.js"></script>
+</body>
+</html>

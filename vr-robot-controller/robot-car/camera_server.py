@@ -2,49 +2,36 @@
 # ^ "Shebang": lets Linux run this file directly as ./camera_server.py.
 #   Ignored when you type `python3 camera_server.py`.
 """
-camera_server.py - turn on the car's camera and show it live in a web
-browser on your laptop, AND serve the headset page that shows the camera
-on a floating screen while sending the joysticks to drive_server.py.
+camera_server.py - the car's camera, live in a browser, plus the website.
 
-=============================================================================
-DRIVING WITH VIDEO (the headset page, https://PI_IP:8443/xr)
-=============================================================================
-A headset can only run ONE VR/mixed-reality session at a time, so the
-camera screen and the joystick sending have to live on the same page.
-This /xr page does both:
-    camera  -> /stream (this file)     -> floating screen in the headset
-    sticks  -> wss://PI_IP:8765        -> drive_server.py -> motors
-It sends exactly what vr/joystick_control.html sends ({lx, ly, rx, ry},
-25 times a second, deadzone + curve applied), so drive_server.py needs no
-changes. Two tags under the screen show the state of each link:
-    LIVE / NO VIDEO            - is the camera picture arriving?
-    CONTROLS ON / CONTROLS OFF - is the joystick link to drive_server.py open?
-
-Run BOTH programs from the same folder (~/robot-car) so they share one
-cert.pem/key.pem, and don't run server/https_server.py at the same time:
-it also uses port 8443.
-
-=============================================================================
-WHERE THIS FITS
-=============================================================================
-Test 1 (motor_test.py) proved the wheels work. This is Test 2: prove the
-camera works and that its picture can travel over Wi-Fi to another device.
-It touches NOTHING else - no motors, no headset - so if it fails, the
-problem can only be the camera, this file, or the network.
+Runs on:   the Raspberry Pi, from ~/robot-car
+Run:       python3 camera_server.py          (Ctrl+C to stop)
+Serves:    http://PI_IP:8000/  or  https://PI_IP:8443/   the website:
+             /            start screen
+             /begin       pre-drive checks + controls + "Enter mixed reality"
+                          (the headset page; /drive and /xr are the same page)
+             /settings    settings (shared with the headset's settings panel)
+             /spectator   big video + the driver's readings, for an audience
+             /about       what the project does and how it works
+             /video       just the video, full window
+           Mixed reality needs https: use https://PI_IP:8443/begin on the Quest
+           (or the one-time Quest setting in SETUP.md for http).
+Pages:     web/  (pages/, css/, js/, lib/) - this file only sends them
+Works with drive_server.py, which the headset page connects to for the
+joysticks (wss://PI_IP:8765). Run both from the same folder so they share
+one cert.pem / key.pem.
 
 =============================================================================
 HOW IT WORKS
 =============================================================================
-    Pi camera -> picamera2 -> JPEG pictures -> Flask web server -> your browser
+    Pi camera -> picamera2 -> JPEG pictures -> Flask web server -> browser
 
 1. picamera2 (the Raspberry Pi's camera library) captures video and
    compresses each frame into a JPEG picture.
 2. Flask (a small Python web server) answers on TWO ports at once:
-     http://PI_IP:8000           plain web page with the video - same as
-                                 always, no security warning (laptop/Quest)
-     https://PI_IP:8443/xr       the headset page: the video on a floating
-                                 screen in your real room (mixed reality)
-   Both also serve /stream, the video itself.
+     http://PI_IP:8000           the plain video page - no security warning
+     https://PI_IP:8443/drive    the headset page (mixed reality)
+   Both also serve /stream, the video itself, and the files in web/.
 3. The video is "MJPEG": a never-ending stream of JPEG pictures, one after
    another. Browsers can show this in an ordinary <img> tag with no extra
    code - each new picture replaces the last, which looks like video.
@@ -59,26 +46,39 @@ WHY THIS APPROACH
   The https certificate is "self-signed" (made by the Pi itself, see
   make_certificate() below), so the browser shows a security warning the
   first time. Click "Advanced" -> "Proceed"; that's expected.
+* A headset can only run ONE mixed-reality session at a time, so the
+  camera screen and the joystick sending live on the same page
+  (web/js/drive.js).
 * Only ONE program can use the camera (and port 8000) at a time. Stop any
   older camera_server.py before starting this one.
 
 =============================================================================
-HOW TO RUN IT (on the Pi)
+ADDRESSES THIS SERVER ANSWERS
 =============================================================================
-    cd ~/robot-car
-    python3 camera_server.py
-
-Laptop (same Wi-Fi):      http://PI_IP:8000
-Quest 3 mixed reality:    https://PI_IP:8443/xr
-Stop it with Ctrl+C.
+    /                      web/pages/index.html      start screen
+    /begin, /drive, /xr    web/pages/drive.html      headset page (begin screen in 2D)
+    /settings              web/pages/settings.html
+    /spectator             web/pages/spectator.html
+    /about                 web/pages/about.html
+    /video                 web/pages/video.html      plain video page
+    /stream                the MJPEG video
+    /config.json           picture size + port numbers, read by the pages
+    /api/settings          GET: saved settings (JSON). POST: save new ones.
+                           Kept in settings.json next to this file, so the
+                           laptop settings page and the headset share them.
+    /api/logs              GET: the session logs drive_server.py has saved
+    /logs/<name>           download one session log (CSV)
+    /css/..., /js/..., /lib/..., /img/...   files from web/
 """
 
 import io
+import json
+# ^ Reading and writing settings.json.
 # ^ io.BufferedIOBase: the "file-like object" shape picamera2 writes into.
 import logging
 # ^ Timestamped messages, so you can see in the SSH window what's happening.
 import os
-# ^ os.path: finds the folder this file is in, to keep the certificate there.
+# ^ os.path: finds the folder this file is in (for web/ and the certificate).
 import ssl
 # ^ Python's built-in https/encryption support.
 import subprocess
@@ -88,8 +88,10 @@ import threading
 import time
 # ^ Used to measure and log the frame rate.
 
-from flask import Flask, Response
-# ^ Flask: the web server. Response: lets us send the never-ending video stream.
+from flask import Flask, Response, jsonify, request, send_from_directory
+# ^ Flask: the web server. Response: lets us send the never-ending video
+#   stream. jsonify / send_from_directory: send JSON and files. request: the
+#   settings a page sends to /api/settings.
 #   Installed by `pip3 install flask ... --break-system-packages` (SETUP.md step 3).
 from werkzeug.serving import make_server
 # ^ Werkzeug is the web server underneath Flask (installed with it).
@@ -104,7 +106,7 @@ from libcamera import Transform, controls
 # ^ Transform lets the camera flip/rotate the picture itself; controls holds
 #   names for camera settings like the exposure mode (comes with picamera2).
 from picamera2.encoders import Quality
-# ^ The quality levels for QUALITY above.
+# ^ The quality levels for QUALITY below.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("camera")
@@ -117,13 +119,17 @@ HTTP_PORT = 8000
 #   8000 is a common choice for test web servers; any free number works.
 
 HTTPS_PORT = 8443
-# ^ The door number for the headset's mixed-reality page:
-#   https://PI_IP:8443/xr  (8443 is the usual "second https port").
-#   server/https_server.py also uses 8443 - don't run both at once.
+# ^ The door number for the headset page: https://PI_IP:8443/drive
+#   (8443 is the usual "second https port"). The old
+#   archive/early-tests/https_server.py also used 8443 - don't run both.
 
 DRIVE_PORT = 8765
 # ^ Where drive_server.py listens for the joysticks (wss://PI_IP:8765).
-#   Must match PORT in drive_server.py.
+#   Must match PORT in drive_server.py. Sent to the headset page in /config.json.
+
+VIEWER_PORT = 8766
+# ^ drive_server.py's view-only door (ws://PI_IP:8766, no certificate), used by
+#   laptop pages opened over plain http. Must match VIEWER_PORT in drive_server.py.
 
 WIDTH, HEIGHT = 1024, 768
 # ^ Picture size in pixels. Keep it 4:3 (640x480, 1024x768, 1280x960):
@@ -133,15 +139,15 @@ WIDTH, HEIGHT = 1024, 768
 
 FULL_VIEW = True
 # ^ True = always use the camera's widest view (see full_view_mode() below).
-#   Set to False to let picamera2 choose by itself, as before.
+#   False = let picamera2 choose by itself.
 
 FRAMES_PER_SECOND = 45
 # ^ Pictures per second. More = smoother motion and fresher pictures.
-#   60 means "as many as the camera can do in full view": if it can't reach
-#   60 at this WIDTH x HEIGHT, the start-up log says so and uses its maximum
-#   (about 46 at 1024x768 for the kit's 5 MP camera). Uses roughly 15-25
-#   megabits/s of Wi-Fi. If the "camera running" log shows far fewer
-#   frames/s, or the video stutters, set 30.
+#   If the camera can't reach this at WIDTH x HEIGHT in full view, the
+#   start-up log says so and uses its maximum (about 46 at 1024x768 for the
+#   kit's 5 MP camera). Uses roughly 15-25 megabits/s of Wi-Fi. If the
+#   "camera running" log shows far fewer frames/s, or the video stutters,
+#   set 30.
 
 QUALITY = "HIGH"
 # ^ How much detail each JPEG keeps: VERY_LOW, LOW, MEDIUM, HIGH or
@@ -153,19 +159,30 @@ SHORT_EXPOSURE = True
 #   shutter), so things moving - or the car turning - smear less. The camera
 #   brightens the picture electronically instead, so in dim rooms it can
 #   look grainier. Set to False for the camera's normal exposure.
+#   (Ignored while SHUTTER_US is set.)
 
 SHUTTER_US = 2000
-# ^ Strongest motion-blur fix: a FIXED shutter time, in microseconds.
-#   None = off (SHORT_EXPOSURE above decides). Try 8000 (1/125 s); 4000
-#   (1/250 s) is sharper still. Shorter = sharper motion but darker, so the
-#   camera brightens it electronically and it gets grainier - it works best
-#   in a well-lit room. Overrides SHORT_EXPOSURE when set.
+# ^ Strongest motion-blur fix: a FIXED shutter time, in microseconds
+#   (2000 = 1/500 s). None = off (SHORT_EXPOSURE above decides). 8000
+#   (1/125 s) is brighter; 4000 (1/250 s) in between. Shorter = sharper
+#   motion but darker, so the camera brightens it electronically and it gets
+#   grainier - it works best in a well-lit room.
 
 ROTATE_180 = False
 # ^ Set to True if the picture comes out upside down. That depends on how
 #   the camera is mounted on the car. The camera flips it for free.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# ^ The folder this file is in (~/robot-car on the Pi).
+WEB_DIR = os.path.join(HERE, "web")
+PAGES_DIR = os.path.join(WEB_DIR, "pages")
+# ^ The website's files. Flask serves everything in web/ at the top level,
+#   e.g. web/js/drive.js -> /js/drive.js.
+SETTINGS_FILE = os.path.join(HERE, "settings.json")
+# ^ The website/headset settings, saved by /api/settings. Delete it to go
+#   back to the defaults (or use "Reset to defaults" on the settings page).
+LOG_DIR = os.path.join(HERE, "logs")
+# ^ Where drive_server.py saves session logs (same folder it uses).
 CERT_FILE = os.path.join(HERE, "cert.pem")
 KEY_FILE = os.path.join(HERE, "key.pem")
 # ^ Where the https certificate and its secret key are kept: next to this
@@ -204,7 +221,15 @@ class StreamingOutput(io.BufferedIOBase):
         # ^ For logging the real frame rate every few seconds.
 
     def write(self, buf):
-        """Called by picamera2 (from its own background thread) with each new JPEG."""
+        """Store one new JPEG and wake every waiting viewer.
+
+        Called by picamera2, from its own background thread, for each frame.
+
+        Args:
+            buf: the JPEG, as bytes.
+        Returns:
+            The number of bytes "written" (file-like objects must report it).
+        """
         with self.condition:
             # `with self.condition` locks it, so a viewer can never read
             # a frame while it's halfway through being replaced.
@@ -222,7 +247,6 @@ class StreamingOutput(io.BufferedIOBase):
             self.frame_count = 0
             self.count_started = now
         return len(buf)
-        # ^ File-like objects must report how many bytes were "written".
 
 
 # =============================================================================
@@ -244,13 +268,18 @@ def full_view_mode(cam):
     by itself, and for some picture sizes it picks a cropped one. This
     function lists the modes and chooses, among the full-view modes that
     are fast enough, the smallest one that's still at least WIDTH x HEIGHT
-    (smaller modes = less work for the Pi). Returns None if it can't tell,
-    in which case picamera2 chooses as usual.
+    (smaller modes = less work for the Pi).
 
     If NO full-view mode is as fast as FRAMES_PER_SECOND, it uses the
     fastest full-view mode and lowers FRAMES_PER_SECOND to match, rather
     than switching to a faster zoomed-in mode. So it's safe to ask for a
     high frame rate: you get the most this camera can do in full view.
+
+    Args:
+        cam: the opened Picamera2.
+    Returns:
+        A sensor setting for create_video_configuration(sensor=...), or
+        None if it can't tell (picamera2 then chooses as usual).
     """
     global FRAMES_PER_SECOND
     try:
@@ -344,61 +373,123 @@ except Exception as e:
 # =============================================================================
 # WEB SERVER
 # =============================================================================
-app = Flask(__name__)
-# ^ Create the Flask web app. __name__ is the standard argument - it tells
-#   Flask where this file lives.
+app = Flask(__name__, static_folder=WEB_DIR, static_url_path="")
+# ^ Create the Flask web app. __name__ tells Flask where this file lives.
+#   static_folder / static_url_path: every file in web/ is served at the top
+#   level, e.g. web/css/drive.css -> /css/drive.css. The addresses below
+#   (/, /drive, /stream ...) take priority over files with the same name.
 
-PAGE = """<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pi Car Camera</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #000; color: #eee;
-                 font-family: sans-serif; overflow: hidden; }
-    img  { position: fixed; inset: 0; width: 100%; height: 100%;
-           object-fit: cover; cursor: pointer; }
-    /* ^ The video fills the WHOLE window - no black bars. If the window's
-         shape differs from the camera's, a little is trimmed off the edges.
-         (object-fit: contain would show everything, with black bars.) */
-    .bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
-           background: rgba(0, 0, 0, 0.6); padding: 6px 14px; border-radius: 999px;
-           font-size: 14px; white-space: nowrap; transition: opacity 0.4s; }
-    :fullscreen .bar { opacity: 0; pointer-events: none; }
-    /* ^ Hide the bar while in full screen. */
-  </style>
-</head>
-<body>
-  <img src="/stream" alt="If this stays blank, check the camera_server.py window on the Pi">
-  <div class="bar">Tap the video for full screen &middot;
-    Quest mixed reality: <a id="xr" style="color:#8cf"></a></div>
-  <script>
-    // Link to the headset page, built from whatever address reached this page.
-    var xr = document.getElementById("xr");
-    xr.href = xr.textContent = location.origin + "/xr";
 
-    // Tap/click the video: full screen (hides the browser's address bar).
-    // Tap again to leave. Browsers only allow this after a tap or click.
-    document.querySelector("img").addEventListener("click", function () {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen().catch(function () {});
-    });
-  </script>
-</body>
-</html>"""
-# ^ The whole web page, kept inside this file so there's only one file to
-#   copy. The <img src="/stream"> line is the entire video player: the
-#   browser keeps showing each new picture the /stream address sends.
+def page(name):
+    """Send one page from web/pages/."""
+    return send_from_directory(PAGES_DIR, name)
 
 
 @app.route("/")
 def index():
-    """The home page: http://PI_IP:8000/"""
-    return PAGE.replace("__HTTPS_PORT__", str(HTTPS_PORT))
-    # ^ `@app.route("/")` above means "run this function when a browser
-    #   visits the site's main address". It returns the page above, with
-    #   the https port number filled into the headset link.
+    """The start screen."""
+    return page("index.html")
+
+
+@app.route("/begin")
+@app.route("/drive")
+@app.route("/xr")
+def drive():
+    """The headset page: begin screen in 2D, driving in mixed reality.
+    /drive and /xr are older addresses for the same page."""
+    return page("drive.html")
+
+
+@app.route("/settings")
+def settings_page():
+    """The settings page (laptop or Quest browser)."""
+    return page("settings.html")
+
+
+@app.route("/spectator")
+def spectator():
+    """Big video + the driver's readings, view-only, for an audience."""
+    return page("spectator.html")
+
+
+@app.route("/about")
+def about():
+    """What the project does, how it works, project details, gallery."""
+    return page("about.html")
+
+
+@app.route("/video")
+def video():
+    """Just the video, full window (the old plain page)."""
+    return page("video.html")
+
+
+@app.route("/config.json")
+def config():
+    """Settings the pages need, so they're set in ONE place (above).
+
+    Returns:
+        JSON: video_width, video_height, https_port, drive_port, viewer_port.
+    """
+    return jsonify(video_width=WIDTH, video_height=HEIGHT,
+                   https_port=HTTPS_PORT, drive_port=DRIVE_PORT, viewer_port=VIEWER_PORT)
+
+
+settings_lock = threading.Lock()
+# ^ Two pages saving at the same moment must not write the file at once.
+
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def api_settings():
+    """Read or save the website/headset settings.
+
+    GET returns what's saved ({} if nothing yet; each page fills in its
+    defaults, see web/js/settings.js). POST saves the JSON object sent,
+    replacing what was there; it must be an object of at most 20 KB.
+    """
+    with settings_lock:
+        if request.method == "POST":
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict) or len(request.get_data()) > 20_000:
+                return jsonify(error="settings must be a JSON object under 20 KB"), 400
+            tmp = SETTINGS_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f, indent=1)
+            os.replace(tmp, SETTINGS_FILE)
+            # ^ Write a new file, then swap it in, so a power cut mid-save
+            #   can't leave a half-written settings file.
+            return jsonify(ok=True)
+        try:
+            with open(SETTINGS_FILE) as f:
+                return jsonify(json.load(f))
+        except (OSError, ValueError):
+            return jsonify({})
+
+
+@app.route("/api/logs")
+def api_logs():
+    """List the saved session logs, newest first.
+
+    Returns:
+        JSON list of {name, size_kb, modified} (modified = seconds since 1970).
+    """
+    try:
+        names = [n for n in os.listdir(LOG_DIR) if n.endswith(".csv")]
+    except OSError:
+        names = []
+    logs = []
+    for n in names:
+        st = os.stat(os.path.join(LOG_DIR, n))
+        logs.append({"name": n, "size_kb": round(st.st_size / 1024, 1), "modified": st.st_mtime})
+    logs.sort(key=lambda l: l["modified"], reverse=True)
+    return jsonify(logs)
+
+
+@app.route("/logs/<path:name>")
+def download_log(name):
+    """Download one session log. send_from_directory refuses names that
+    try to reach outside the logs folder."""
+    return send_from_directory(LOG_DIR, name, as_attachment=True)
 
 
 def generate_frames():
@@ -407,6 +498,9 @@ def generate_frames():
     A "generator" (a function that uses `yield`) hands out data piece by
     piece. Flask sends each piece to the browser as soon as it's yielded,
     and keeps asking for more, forever - which is what makes this a stream.
+
+    Yields:
+        One MJPEG "part" (headers + one JPEG) per new camera frame.
     """
     while True:
         with output.condition:
@@ -440,376 +534,6 @@ def stream():
     #   series of parts - replace the previous one each time a new one
     #   arrives". boundary=frame says the parts are separated by --frame.
     #   That's the whole trick behind MJPEG in a plain <img> tag.
-
-
-# =============================================================================
-# HEADSET PAGE (/xr) - the video on a floating screen in your real room
-# =============================================================================
-# How it works, in the browser on the Quest:
-#   1. The page reads the same /stream as above, but with JavaScript instead
-#      of an <img> tag, and draws each newest JPEG onto a <canvas>.
-#   2. Three.js (a 3D library, loaded from the internet) puts that canvas on a
-#      flat rectangle - the "screen" - in a 3D scene.
-#   3. Tapping "Enter mixed reality" starts a WebXR "immersive-ar" session.
-#      The browser window disappears; the scene's background is see-through,
-#      so the Quest's passthrough cameras show your real room behind the
-#      screen. The screen stays put in the room: look away and it's still
-#      there when you look back.
-#   4. Squeezing either grip button moves the screen back in front of you.
-# A status tag under the screen turns red ("NO VIDEO") if no new picture has
-# arrived for 1 second, so a frozen picture is never mistaken for live video.
-#
-# r"""...""" is a "raw" string: Python leaves the backslashes in the
-# JavaScript alone. __WIDTH__/__HEIGHT__ are filled in by xr() below.
-XR_PAGE = r"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pi Car - Headset</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
-                 color: #e8eaed; font-family: system-ui, sans-serif; }
-    #video { position: fixed; inset: 0; width: 100%; height: 100%;
-             object-fit: cover; }
-    /* ^ The preview fills the whole window, no black bars. (The floating
-         screen in mixed reality always shows the whole picture.) */
-    #msg code { background: #222; padding: 1px 5px; border-radius: 4px; color: #fff; }
-    #panel { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
-             width: max-content; max-width: calc(100% - 32px); box-sizing: border-box;
-             display: flex; flex-direction: column; align-items: center; gap: 8px;
-             padding: 12px 16px; border-radius: 16px; text-align: center;
-             background: rgba(11, 13, 16, 0.72); }
-    /* ^ Button + help text float over the bottom of the video. */
-    #enter { font-size: 20px; padding: 12px 32px; border: 0; border-radius: 999px;
-             background: #3b82f6; color: #fff; cursor: pointer; }
-    #enter:disabled { background: #333; color: #999; cursor: default; }
-    #msg { color: #c4c7cc; max-width: 560px; font-size: 14px; line-height: 1.4; }
-  </style>
-</head>
-<body>
-  <canvas id="video" width="__WIDTH__" height="__HEIGHT__"></canvas>
-  <div id="panel">
-    <button id="enter" disabled>Checking headset...</button>
-    <div id="msg"></div>
-  </div>
-
-<script>
-  // Show any problem ON the page, since the Quest has no easy developer
-  // console. This plain script runs first, even if the 3D code fails.
-  function showProblem(text) {
-    var m = document.getElementById("msg"), b = document.getElementById("enter");
-    b.textContent = "Problem - see below"; b.disabled = true;
-    m.textContent = "Problem: " + text;
-  }
-  window.addEventListener("error", function (e) {
-    showProblem(e.message || "a file failed to load - most likely the 3D library. " +
-                "Copy the whole robot-car folder (including static/) to the Pi again.");
-  }, true);
-  window.addEventListener("unhandledrejection", function (e) { showProblem(String(e.reason)); });
-  setTimeout(function () {
-    if (document.getElementById("enter").textContent === "Checking headset...")
-      showProblem("the 3D library (/static/three.module.min.js) didn't load. " +
-                  "Check that the static folder was copied to the Pi.");
-  }, 8000);
-</script>
-<script type="importmap">
-  { "imports": { "three": "/static/three.module.min.js" } }
-</script>
-<!-- ^ Three.js is served by the Pi itself (robot-car/static/), so the
-       headset doesn't need internet access. -->
-
-<script type="module">
-import * as THREE from "three";
-
-// ---------------- settings you might change ----------------
-const PANEL_WIDTH = 1.6;     // screen width in metres
-const PANEL_DISTANCE = 1.8;  // how far in front of you it appears, metres
-const PANEL_DROP = 0.1;      // how far below eye level, metres (comfier)
-const VIDEO_W = __WIDTH__, VIDEO_H = __HEIGHT__;
-
-// joystick settings - the same values as vr/joystick_control.html
-const DRIVE_PORT = __DRIVE_PORT__;   // drive_server.py listens here
-const SEND_HZ = 25;                  // messages per second to the car
-const DEADZONE = 0.12;               // ignore tiny stick wobble near centre
-const CURVE = 2.0;                   // fine control near centre, full at the edge
-
-const videoCanvas = document.getElementById("video");
-const videoCtx = videoCanvas.getContext("2d");
-const btn = document.getElementById("enter");
-const msg = document.getElementById("msg");
-
-// ---------------- 1. receive the camera stream ----------------
-// /stream sends: "--frame", headers incl. "Content-Length: N", a blank line,
-// then N bytes of JPEG, repeated forever. We cut out each JPEG and draw it.
-const videoTexture = new THREE.CanvasTexture(videoCanvas);
-videoTexture.colorSpace = THREE.SRGBColorSpace;
-videoTexture.generateMipmaps = false;
-videoTexture.minFilter = THREE.LinearFilter;
-// ^ Sharper: the screen shows about one video pixel per headset pixel, so
-//   skip the blurrier pre-shrunk copies ("mipmaps") 3D engines usually make.
-//   Also less work per frame, which helps latency.
-let lastFrameAt = 0;          // when the last picture was drawn (ms)
-let newest = null;            // newest JPEG not yet drawn
-let drawing = false;
-
-async function drawNewest() {
-  // Only ever draws the NEWEST picture: if two arrive while one is being
-  // decoded, the older one is skipped, so the video never falls behind.
-  drawing = true;
-  while (newest) {
-    const jpeg = newest; newest = null;
-    try {
-      const bitmap = await createImageBitmap(jpeg);
-      videoCtx.drawImage(bitmap, 0, 0, videoCanvas.width, videoCanvas.height);
-      bitmap.close();
-      videoTexture.needsUpdate = true;
-      lastFrameAt = performance.now();
-    } catch (e) { /* a damaged frame - just skip it */ }
-  }
-  drawing = false;
-}
-
-function headerEnd(bytes) {   // position of the blank line (\r\n\r\n), or -1
-  for (let i = 0; i + 3 < bytes.length; i++)
-    if (bytes[i] === 13 && bytes[i+1] === 10 && bytes[i+2] === 13 && bytes[i+3] === 10) return i;
-  return -1;
-}
-function join(a, b) {
-  const c = new Uint8Array(a.length + b.length); c.set(a); c.set(b, a.length); return c;
-}
-
-async function readStream() {
-  for (;;) {              // reconnect forever if the Pi or Wi-Fi drops
-    try {
-      const res = await fetch("/stream", { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const reader = res.body.getReader();
-      let buf = new Uint8Array(0);
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf = join(buf, value);
-        for (;;) {
-          const end = headerEnd(buf);
-          if (end < 0) break;
-          const headers = new TextDecoder().decode(buf.subarray(0, end));
-          const m = /Content-Length:\s*(\d+)/i.exec(headers);
-          const start = end + 4;
-          if (!m) { buf = buf.subarray(start); continue; }
-          const len = parseInt(m[1], 10);
-          if (buf.length < start + len) break;          // rest still arriving
-          newest = new Blob([buf.slice(start, start + len)], { type: "image/jpeg" });
-          buf = buf.subarray(start + len);
-          if (!drawing) drawNewest();
-        }
-      }
-    } catch (e) { /* fall through and retry */ }
-    await new Promise(r => setTimeout(r, 1000));
-  }
-}
-readStream();
-
-// ---------------- 1b. joystick link to drive_server.py ----------------
-// Same job as vr/joystick_control.html: open a secure websocket to the Pi
-// and, while in the headset, send the thumbsticks 25 times a second.
-// drive_server.py stops the car by itself if these messages stop arriving.
-let ws = null;
-let lastSent = 0;
-
-function connectDrive() {
-  ws = new WebSocket("wss://" + location.hostname + ":" + DRIVE_PORT);
-  ws.onclose = () => setTimeout(connectDrive, 1000);   // keep retrying
-  ws.onerror = () => {};                               // onclose handles it
-}
-connectDrive();
-
-function controlsOn() { return ws && ws.readyState === WebSocket.OPEN; }
-
-function sendSticks(msg) {
-  if (controlsOn()) ws.send(JSON.stringify(msg));
-}
-
-function condition(value) {
-  // deadzone + curve, exactly as in joystick_control.html
-  const sign = Math.sign(value), magnitude = Math.abs(value);
-  if (magnitude < DEADZONE) return 0;
-  return sign * Math.pow((magnitude - DEADZONE) / (1 - DEADZONE), CURVE);
-}
-
-function readSticks(session) {
-  // Quest thumbsticks are axes[2] (x) and axes[3] (y); pushing forward is
-  // NEGATIVE y - drive_server.py flips it. A sleeping controller = centred.
-  let lx = 0, ly = 0, rx = 0, ry = 0;
-  for (const source of session.inputSources) {
-    const pad = source.gamepad;
-    if (!pad || pad.axes.length < 4) continue;
-    if (source.handedness === "left")  { lx = condition(pad.axes[2]); ly = condition(pad.axes[3]); }
-    if (source.handedness === "right") { rx = condition(pad.axes[2]); ry = condition(pad.axes[3]); }
-  }
-  return { lx, ly, rx, ry };
-}
-
-// ---------------- 2. build the floating screen ----------------
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(window.devicePixelRatio);
-renderer.setClearColor(0x000000, 0);           // see-through = your real room
-renderer.xr.enabled = true;
-renderer.xr.setReferenceSpaceType("local");
-renderer.xr.setFoveation(0);
-// ^ Draw the whole view at full sharpness. By default the edges of your
-//   view are drawn at lower resolution to save work ("foveation"), which
-//   makes the screen look blurry whenever it isn't dead centre.
-renderer.domElement.style.display = "none";    // only drawn inside the headset
-document.body.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera();  // the headset controls this
-const panelH = PANEL_WIDTH * VIDEO_H / VIDEO_W;
-const screen = new THREE.Group();
-scene.add(screen);
-
-function roundedRect(w, h, r) {
-  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
-  s.moveTo(x + r, y);         s.lineTo(x + w - r, y);     s.quadraticCurveTo(x + w, y, x + w, y + r);
-  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  s.lineTo(x + r, y + h);     s.quadraticCurveTo(x, y + h, x, y + h - r);
-  s.lineTo(x, y + r);         s.quadraticCurveTo(x, y, x + r, y);
-  return new THREE.ShapeGeometry(s);
-}
-
-const bezel = new THREE.Mesh(roundedRect(PANEL_WIDTH + 0.06, panelH + 0.06, 0.03),
-  new THREE.MeshBasicMaterial({ color: 0x0b0d10, transparent: true, opacity: 0.92 }));
-bezel.position.z = -0.005;                     // just behind the picture
-screen.add(bezel);
-
-screen.add(new THREE.Mesh(new THREE.PlaneGeometry(PANEL_WIDTH, panelH),
-  new THREE.MeshBasicMaterial({ map: videoTexture, toneMapped: false })));
-
-// small status tags under the screen:
-//   bottom-left:  "LIVE" / "NO VIDEO"             (camera picture)
-//   bottom-right: "CONTROLS ON" / "CONTROLS OFF"  (joystick link to the car)
-function makeTag(x) {
-  const canvas = Object.assign(document.createElement("canvas"), { width: 512, height: 64 });
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.05),
-    new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false }));
-  mesh.position.set(x, -panelH / 2 - 0.07, 0);
-  screen.add(mesh);
-
-  let current = "";
-  return function set(text, color) {
-    if (text === current) return;              // only redraw when it changes
-    current = text;
-    ctx.clearRect(0, 0, 512, 64);
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(24, 32, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e8eaed";
-    ctx.font = "600 32px system-ui, sans-serif";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, 46, 34);
-    texture.needsUpdate = true;
-  };
-}
-const setTag = makeTag(-PANEL_WIDTH / 2 + 0.2);
-const setControlTag = makeTag(PANEL_WIDTH / 2 - 0.2);
-
-// Put the screen PANEL_DISTANCE in front of wherever you're looking
-// (left/right only - looking up or down doesn't tilt it).
-let needsPlacement = false;
-function placeScreen(pose) {
-  const p = pose.transform.position, o = pose.transform.orientation;
-  const head = new THREE.Vector3(p.x, p.y, p.z);
-  const forward = new THREE.Vector3(0, 0, -1)
-    .applyQuaternion(new THREE.Quaternion(o.x, o.y, o.z, o.w));
-  forward.y = 0;
-  if (forward.lengthSq() < 1e-4) forward.set(0, 0, -1);
-  forward.normalize();
-  screen.position.copy(head).addScaledVector(forward, PANEL_DISTANCE);
-  screen.position.y = head.y - PANEL_DROP;
-  screen.lookAt(head.x, screen.position.y, head.z);   // face you, upright
-}
-
-renderer.setAnimationLoop((time, frame) => {
-  if (!renderer.xr.isPresenting) return;
-  if (frame && needsPlacement) {
-    const pose = frame.getViewerPose(renderer.xr.getReferenceSpace());
-    if (pose) { placeScreen(pose); needsPlacement = false; }
-  }
-  const live = performance.now() - lastFrameAt < 1000;
-  setTag(live ? "LIVE" : "NO VIDEO", live ? "#34c759" : "#ff453a");
-  setControlTag(controlsOn() ? "CONTROLS ON" : "CONTROLS OFF",
-                controlsOn() ? "#34c759" : "#ff453a");
-
-  // send the sticks, at most SEND_HZ times a second
-  if (frame && time - lastSent >= 1000 / SEND_HZ) {
-    lastSent = time;
-    sendSticks(readSticks(frame.session));
-  }
-
-  renderer.render(scene, camera);
-});
-
-// ---------------- 3. the "Enter mixed reality" button ----------------
-async function checkSupport() {
-  if (!window.isSecureContext) {
-    // Browsers only allow mixed reality on "secure" pages. Plain http:// to
-    // the Pi counts as secure only after the one-time Quest setting below.
-    const https = "https://" + location.hostname + ":__HTTPS_PORT__/xr";
-    btn.textContent = "Mixed reality blocked on http://";
-    msg.innerHTML =
-      "One-time Quest setting: open <code>chrome://flags</code>, search " +
-      "<b>insecure</b>, set <b>Insecure origins treated as secure</b> to " +
-      "<b>Enabled</b>, type <code>" + location.origin + "</code> in its box, " +
-      "tap outside the box, then tap <b>Relaunch</b>. " +
-      'Or use the https page: <a style="color:#8cf" href="' + https + '">' + https + "</a>";
-    return;
-  }
-  if (!navigator.xr || !(await navigator.xr.isSessionSupported("immersive-ar"))) {
-    btn.textContent = "Mixed reality not available here";
-    msg.textContent = "Open this page in the Meta Quest browser to use mixed reality.";
-    return;
-  }
-  btn.disabled = false;
-  btn.textContent = "Enter mixed reality";
-  msg.textContent = "The camera appears as a floating screen in your room. " +
-    "Left stick: forward/back. Right stick: turn. " +
-    "Squeeze a grip button to bring the screen back in front of you. " +
-    "Press the Meta button on the right controller to leave (the car stops).";
-}
-
-btn.addEventListener("click", async () => {
-  try {
-    const session = await navigator.xr.requestSession("immersive-ar");
-    session.addEventListener("squeeze", () => { needsPlacement = true; });
-    session.addEventListener("end", () => {
-      sendSticks({ lx: 0, ly: 0, rx: 0, ry: 0 });   // leaving = stop the car
-      btn.disabled = false; btn.textContent = "Enter mixed reality";
-    });
-    await renderer.xr.setSession(session);
-    needsPlacement = true;
-    btn.disabled = true; btn.textContent = "In mixed reality";
-  } catch (e) {
-    msg.textContent = "Couldn't start mixed reality: " + e.message;
-  }
-});
-
-checkSupport();
-</script>
-</body>
-</html>"""
-
-
-@app.route("/xr")
-def xr():
-    """The headset page: https://PI_IP:8000/xr"""
-    return (XR_PAGE.replace("__WIDTH__", str(WIDTH))
-                   .replace("__HEIGHT__", str(HEIGHT))
-                   .replace("__HTTPS_PORT__", str(HTTPS_PORT))
-                   .replace("__DRIVE_PORT__", str(DRIVE_PORT)))
-    # ^ Fills in the picture size so the screen has the right shape.
 
 
 # =============================================================================
@@ -856,6 +580,7 @@ class NonBlockingHandshakeContext(ssl.SSLContext):
     """
 
     def wrap_socket(self, sock, *args, **kwargs):
+        """Same as the normal wrap_socket, but with the handshake postponed."""
         kwargs["do_handshake_on_connect"] = False
         return super().wrap_socket(sock, *args, **kwargs)
 
@@ -886,8 +611,8 @@ if __name__ == "__main__":
     #   for every frame, in its own background thread.
     #   quality=...: how much detail each JPEG keeps (QUALITY setting above).
     log.info("Camera on: %dx%d at %d fps, %s quality", WIDTH, HEIGHT, FRAMES_PER_SECOND, QUALITY)
-    log.info("Laptop:  http://<this Pi's IP>:%d       (find the IP with: hostname -I)", HTTP_PORT)
-    log.info("Headset: https://<this Pi's IP>:%d/xr   (mixed reality)", HTTPS_PORT)
+    log.info("Laptop:  http://<this Pi's IP>:%d          (find the IP with: hostname -I)", HTTP_PORT)
+    log.info("Headset: https://<this Pi's IP>:%d/begin   (mixed reality)", HTTPS_PORT)
 
     try:
         threading.Thread(target=http_server.serve_forever, daemon=True).start()

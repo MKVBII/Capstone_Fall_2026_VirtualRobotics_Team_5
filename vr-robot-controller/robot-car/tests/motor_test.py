@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # ^ The "shebang" line. On Linux it tells the system "run this file with
 #   python3" if you ever run it directly as ./motor_test.py. When you type
-#   `python3 motor_test.py` it is simply ignored.
+#   `python3 tests/motor_test.py` it is simply ignored.
 
 """
 motor_test.py - spin each wheel briefly in each direction to prove the
 motor hardware works, before any networking or headset code is involved.
+
+Runs on:   the Raspberry Pi, from ~/robot-car
+Run:       python3 tests/motor_test.py    (car ON A BLOCK, battery ON)
+Hardware:  direction pins GPIO 23/24/27/22, speed on PWM HAT channels 0/1
+Prints:    forward, backward, left, right, done - one short spin each
 
 =============================================================================
 WHY THIS SCRIPT EXISTS
@@ -74,7 +79,7 @@ TURN ON THE CAR'S BATTERY. The motors are powered by the battery pack,
 not by the Pi. The Pi can be on with the motor power off, in which case
 this script runs without errors but nothing moves.
 
-RUN IT:   cd ~/robot-car && python3 motor_test.py      (see SETUP.md, Test 1)
+RUN IT:   cd ~/robot-car && python3 tests/motor_test.py   (see SETUP.md, Test 1)
 PANIC:    Ctrl+C                     (the script stops the motors on its way out)
 =============================================================================
 """
@@ -130,9 +135,9 @@ from adafruit_pca9685 import PCA9685
 # them, so always check which one a diagram or library is using. Physical
 # positions are noted in each comment for when you're tracing wires.
 #
-# Values come from OSOYOO's own sample code (picar-basic.py). The driving
-# code we build next will copy these exact numbers from this file, so this
-# test checks exactly the wiring the real program will use.
+# Values come from OSOYOO's own sample code (picar-basic.py). drive_server.py
+# uses these exact numbers, so this test checks exactly the wiring the real
+# program uses. Change them in both files together.
 IN1_PIN = 23   # physical pin 16 - left motor, direction input A
 IN2_PIN = 24   # physical pin 18 - left motor, direction input B
 IN3_PIN = 27   # physical pin 13 - right motor, direction input A
@@ -150,6 +155,15 @@ ENB_CHANNEL = 1   # right motor speed (ENB on the driver board)
 # wrong wheel, the assumption is backwards: swap the two channel numbers
 # AND swap IN1/IN2 with IN3/IN4.
 
+# --- Direction fixes (same settings as drive_server.py) -------------------
+# Test 1 showed that on our car "IN1 on / IN2 off" actually spins the wheels
+# BACKWARD. Without these flags, every move in this test came out mirrored:
+# forward went backward and left spun right. drive_server.py has always
+# corrected for it with these same two flags; now this test does too, so
+# what it prints is what the car does. Keep them matching drive_server.py.
+LEFT_REVERSED = True
+RIGHT_REVERSED = True
+
 # --- PWM frequency -------------------------------------------------------
 # How many times per second the PWM signal flicks on and off.
 #
@@ -159,12 +173,10 @@ ENB_CHANNEL = 1   # right motor speed (ENB on the driver board)
 #     At low frequencies they can whine and feel jerky at slow speeds.
 #   * Hobby servos (like the SG90 camera-pan servo in this kit) REQUIRE
 #     about 50-60 Hz and won't work properly at 1000 Hz.
-# OSOYOO's sample uses 60 Hz so the servo can share the HAT. This test
-# uses 1000 Hz because it's motors-only, and it worked, so the driving code
-# will use 1000 Hz too. When we add the camera-pan servo, we'll have to
-# choose: drop everything to 50-60 Hz, or drive the servo from a spare
-# GPIO pin instead of the HAT.
-PWM_FREQUENCY = 1000
+# OSOYOO's sample uses 60 Hz so the servo can share the HAT. Now that the
+# camera-pan servo is on the HAT (hardware/camera_pan.py, channel 15), everything
+# runs at 60 Hz, matching drive_server.py. (Was 1000 Hz before the servo.)
+PWM_FREQUENCY = 60
 
 # --- Speed ------------------------------------------------------------------
 # Fraction of full power, 0.0 (stopped) to 1.0 (full).
@@ -214,8 +226,8 @@ def set_speed(channel, fraction):
 
     # Clamp the value into the safe range 0.0-1.0. If a bug ever passed
     # in 5.0 or -2.0, this turns it into 1.0 or 0.0 instead of sending
-    # nonsense to the chip. Cheap insurance, and an important habit once
-    # live joystick values from the headset start feeding into this.
+    # nonsense to the chip. Cheap insurance - drive_server.py does the same
+    # with the live joystick values from the headset.
     fraction = max(0.0, min(1.0, fraction))
 
     # The library wants the duty cycle as a 16-bit whole number, where
@@ -258,17 +270,20 @@ def drive(left_forward, right_forward, speed=SPEED, duration=DURATION):
       left forward + right reverse  -> spins right on the spot
     """
 
-    # IMPORTANT - WHICH PIN PATTERN IS "FORWARD"?
+    # WHICH PIN PATTERN IS "FORWARD"?
     # This script treats IN1 on / IN2 off as forward. OSOYOO's tutorial
     # text says the same, BUT OSOYOO's actual sample code (picar-basic.py)
-    # does the opposite: its forward() turns IN2/IN4 on and IN1/IN3 off,
+    # does the opposite: its forward() turns IN2/IN4 on and IN1/IN3 off.
     # Which is right depends on how the motor wires are physically
-    # connected, so this test is how we find out: watch the wheels when it
-    # prints "forward", and write the answer in SETUP.md's Test 1 notes.
-    #   * Wheels really go forward  -> this pattern is right.
-    #   * Wheels go backward        -> OSOYOO's code is right; only this
-    #     script's labels are swapped.
-    # The driving code we build next will use whichever pattern is right.
+    # connected. On our car, Test 1 showed the OPPOSITE of this script's
+    # labels (OSOYOO's code was right), which is what LEFT_REVERSED /
+    # RIGHT_REVERSED in CONFIG correct for - here and in drive_server.py.
+
+    # Apply the direction fixes from CONFIG (see LEFT_REVERSED above).
+    if LEFT_REVERSED:
+        left_forward = not left_forward
+    if RIGHT_REVERSED:
+        right_forward = not right_forward
 
     # Left motor direction: exactly one of the two pins is on. Both on at
     # once would make the H-bridge brake rather than drive, so we always
@@ -336,7 +351,7 @@ finally:
     stop()
 
     # Release the PCA9685 (stops its outputs and frees the I2C bus) so the
-    # next program - another test run, or server.py - can claim it cleanly.
+    # next program - another test run, or drive_server.py - can claim it cleanly.
     pca.deinit()
 
     # The four GPIO pins need no manual release: gpiozero automatically

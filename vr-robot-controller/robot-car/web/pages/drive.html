@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<!--
+  drive.html - the begin screen (2D) and the headset driving page (mixed reality).
+
+  Served by:  camera_server.py at  /begin  (also /drive and the older /xr)
+  Opened on:  the Meta Quest 3 browser: https://PI_IP:8443/begin
+              (a laptop shows the begin screen, but can't enter mixed reality)
+  Code:       ../css/site.css + ../css/drive.css (look),
+              ../js/page-errors.js (problem messages), ../js/drive.js (everything else)
+
+  In 2D, this is the last stop before driving: a live checklist, the
+  controls, how to stop, and the Enter button. The Enter button must be on
+  the same page that runs mixed reality (browsers only start it from a
+  click on that page), which is why the begin screen and the driving page
+  are one page. Inside mixed reality, everything is drawn in 3D by drive.js.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Begin - VR Robot Controller</title>
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/site.css">
+  <link rel="stylesheet" href="/css/drive.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">VR Robot Controller</a>
+    <nav>
+      <a href="/">Start</a>
+      <a href="/begin" aria-current="page">Drive</a>
+      <a href="/settings">Settings</a>
+      <a href="/spectator">Spectator</a>
+      <a href="/about">About</a>
+    </nav>
+    <button class="theme-toggle" type="button"></button>
+  </header>
+
+  <main class="container stack">
+    <div>
+      <h1>Ready to drive?</h1>
+      <p class="muted" id="robot-name">Connecting to the robot...</p>
+    </div>
+
+    <div class="grid two">
+      <!-- Live camera preview. drive.js draws each picture onto this canvas,
+           and the same canvas is the picture on the floating screen in MR. -->
+      <section class="card">
+        <h2>Camera</h2>
+        <canvas id="video" class="video-preview"></canvas>
+      </section>
+
+      <section class="card">
+        <h2>Checks</h2>
+        <ul class="checklist" id="checklist"></ul>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Controls</h2>
+      <div class="grid two" id="controls"></div>
+    </section>
+
+    <section class="card notice">
+      <h3>How to stop</h3>
+      <p>Let go of the sticks: the robot stops within 0.3 seconds. Leaving mixed
+         reality (Meta button) also stops it, and so does opening the settings
+         panel in the headset.</p>
+    </section>
+  </main>
+
+  <!-- The Enter button and its help/problem text, always in view. -->
+  <div id="panel">
+    <div id="confirm" hidden>
+      <p><strong>Some checks aren't green:</strong></p>
+      <ul id="confirm-list"></ul>
+      <div class="row">
+        <button class="btn primary" id="confirm-yes" type="button">Enter anyway</button>
+        <button class="btn" id="confirm-no" type="button">Cancel</button>
+      </div>
+    </div>
+    <button id="enter" class="btn primary big" disabled>Checking headset...</button>
+    <div id="msg"></div>
+  </div>
+
+  <!-- Loaded first and as a plain script, so it can still report a problem
+       on the page if the 3D code below fails to load. -->
+  <script src="/js/page-errors.js"></script>
+
+  <!-- "three" = the 3D library, served by the Pi itself (web/lib/), so the
+       headset doesn't need internet access. An import map must be written
+       inside the page; browsers don't load it from a separate file. -->
+  <script type="importmap">
+    { "imports": { "three": "/lib/three.module.min.js" } }
+  </script>
+
+  <script type="module" src="/js/drive.js"></script>
+</body>
+</html>

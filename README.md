@@ -109,16 +109,16 @@ CSI camera ── ribbon cable ──► Pi 4: picamera2 captures frames
   skipped instead of queued, so the picture stays live instead of falling
   behind.
 
-### Programs on the Pi (when finished)
+### Programs on the Pi
 
 | Program | Port | Job |
 |---|---|---|
-| Camera server (`camera_server.py`) | 8000 | Camera → MJPEG video stream; also serves the VR web page |
-| Control server (planned) | 8765 | Joystick messages → motors, plus the 0.3 s safety stop |
+| `camera_server.py` | 8000 (http), 8443 (https) | Camera → MJPEG video stream; also serves the website in `web/` (plain video page, headset page) |
+| `drive_server.py` | 8765 (wss) | Joystick messages → motors, the 0.3 s safety stop, rear sensors and camera servo; sends readings back to the headset |
 
-The Quest only allows VR on secure (`https://`) pages, so the headset step
-adds a self-signed security certificate. Until then, everything runs over
-plain `http://` for testing in a laptop browser.
+The Quest only allows mixed reality on secure (`https://`) pages, so
+`camera_server.py` makes a self-signed security certificate on its first
+run, and `drive_server.py` uses the same one.
 
 ---
 
@@ -126,14 +126,20 @@ plain `http://` for testing in a laptop browser.
 
 ```
 Capstone_Fall_2026_VirtualRobotics_Team_5/
-├── README.md                     this file
+├── README.md                          this file
 ├── Team 5 Requirements Doc (Final Draft).pdf
 ├── Team 5 Requirements Doc (Rough Draft).pdf
+├── Team 5_ VirtualRobotics Functional Specification.pdf
+├── archive/
+│   └── early-tests/                   the first connection tests (kept for history)
 └── vr-robot-controller/
-    └── robot-car/
-        ├── SETUP.md              START HERE: Pi setup and each test, step by step
-        ├── motor_test.py         Test 1: wheels move
-        └── camera_server.py      Test 2: live camera in a laptop browser
+    └── robot-car/                     everything that runs on the car's Pi
+        ├── SETUP.md                   START HERE: Pi setup and each test, step by step
+        ├── camera_server.py           camera + website
+        ├── drive_server.py            driving from the headset
+        ├── hardware/                  camera servo, rear sensors, Pi health
+        ├── tests/                     motor test + a table of every test command
+        └── web/                       the website: pages, css, js, 3D library
 ```
 
 **To get started, follow [`vr-robot-controller/robot-car/SETUP.md`](vr-robot-controller/robot-car/SETUP.md).**
@@ -148,12 +154,11 @@ only when the next test needs them.
 
 | # | Test | What it proves | Status |
 |---|---|---|---|
-| 1 | `motor_test.py` | Motors, wiring, PWM HAT and battery all work | ✅ Passed |
-| 2 | `camera_server.py` in a laptop browser | The camera works and video reaches another device over Wi-Fi | 🔜 Ready to run |
-| 3 | Camera in the headset | The VR page loads on the Quest over https, and the video shows on a floating screen | Not built yet |
-| 4 | Left stick throttle (forward/back) | Joystick → WebSocket → Pi → motors, plus the safety stop | Not built yet |
-| 5 | Right stick turning | Turning, blended smoothly with throttle | Not built yet |
-| 6 | Polish | Video comfort in the headset, speed limits, and optional sensor readouts (distance to obstacles from the car's ultrasonic sensor) | Not built yet |
+| 1 | `tests/motor_test.py` | Motors, wiring, PWM HAT and battery all work | ✅ Passed |
+| 2 | `camera_server.py` in a laptop browser | The camera works and video reaches another device over Wi-Fi | ✅ Working |
+| 3 | Camera in the headset | The headset page loads on the Quest, and the video shows on a floating screen | ✅ Working |
+| 4–5 | `drive_server.py`: sticks drive the car | Joystick → WebSocket → Pi → motors, turning blended with throttle, plus the safety stop | ✅ Working |
+| 6 | Polish | Head-look camera servo, info dashboard, two rear ultrasonic sensors that slow/stop reverse | 🔧 In progress (tuning on the car) |
 
 This follows the order of our sprint plan. The camera is being tested
 before the joysticks because it needs no motor code, which makes it the
