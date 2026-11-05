@@ -3,29 +3,35 @@
 Team 5 capstone (Fall 2026): drive a Raspberry Pi robot car from a Meta Quest 3
 headset, with live video from the car's camera.
 
-**Current focus:** the OSOYOO Pi Car (model 2020005500) only, built and tested
+**Current focus:** the OSOYOO Pi Car (model 2020005500), built and tested
 one step at a time.
 
 ## Folder
 
 ```
 vr-robot-controller/
-└── robot-car/
+└── robot-car/              everything that runs on the car's Pi
     ├── SETUP.md            start here: Pi setup + tests, step by step
-    ├── motor_test.py       Test 1: wheels move
-    └── camera_server.py    Test 2: live camera in a laptop browser
+    ├── camera_server.py    camera + website (http 8000, https 8443)
+    ├── drive_server.py     driving from the headset (wss 8765)
+    ├── hardware/           camera_pan.py, rear_sensor.py, pi_status.py
+    ├── tests/              motor_test.py + README.md (every test command)
+    └── web/                pages/, css/, js/, lib/ (the website)
 ```
+
+Run everything from `~/robot-car` on the Pi, e.g.
+`python3 camera_server.py`, `python3 drive_server.py`,
+`python3 hardware/rear_sensor.py --selftest`.
 
 ## Progress
 
 | Test | What it proves | Status |
 |---|---|---|
-| 1. `motor_test.py` | Motors, wiring, PWM HAT, battery | Passed |
-| 2. `camera_server.py` | Camera works and streams over Wi-Fi | Next |
-| 3. Camera in the headset | Video reaches the Quest in VR | Not built yet |
-| 4. Joystick driving | Quest thumbstick drives the car | Not built yet |
-
-Each new test gets its own file(s), added only after the previous test passes.
+| 1. `tests/motor_test.py` | Motors, wiring, PWM HAT, battery | Passed |
+| 2. `camera_server.py` | Camera works and streams over Wi-Fi | Working |
+| 3. Camera in the headset | Video reaches the Quest in mixed reality | Working |
+| 4. Joystick driving | Quest thumbsticks drive the car | Working |
+| 5. Polish | Head-look camera, dashboard, rear sensors | In progress |
 
 ## The earlier "universal controller" version
 

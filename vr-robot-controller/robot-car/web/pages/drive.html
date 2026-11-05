@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--
+  drive.html - the headset page: live camera on a floating screen in mixed
+  reality, plus the joystick link that drives the robot.
+
+  Served by:  camera_server.py at  https://PI_IP:8443/drive  (also /xr)
+  Opened on:  the Meta Quest 3 browser (a laptop shows a 2D preview)
+  Code:       ../css/drive.css (look), ../js/page-errors.js (problem
+              messages), ../js/drive.js (everything else)
+
+  The page itself is only the 2D part you see BEFORE entering mixed
+  reality: the video preview, the rear-sensor pill and the Enter button.
+  Inside mixed reality, everything is drawn in 3D by drive.js.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi Car - Headset</title>
+  <link rel="stylesheet" href="/css/drive.css">
+</head>
+<body>
+  <!-- Video preview. drive.js draws each camera picture onto this canvas,
+       and the same canvas is the picture on the floating screen in MR. -->
+  <canvas id="video"></canvas>
+
+  <!-- Readings for the 2D page (laptop, or before entering MR). -->
+  <div id="hud2d">
+    <div id="rear">REAR: NO DATA</div>
+    <div id="info2d"></div>
+  </div>
+
+  <!-- The Enter button and its help/problem text. -->
+  <div id="panel">
+    <button id="enter" disabled>Checking headset...</button>
+    <div id="msg"></div>
+  </div>
+
+  <!-- Loaded first and as a plain script, so it can still report a problem
+       on the page if the 3D code below fails to load. -->
+  <script src="/js/page-errors.js"></script>
+
+  <!-- "three" = the 3D library, served by the Pi itself (web/lib/), so the
+       headset doesn't need internet access. An import map must be written
+       inside the page; browsers don't load it from a separate file. -->
+  <script type="importmap">
+    { "imports": { "three": "/lib/three.module.min.js" } }
+  </script>
+
+  <script type="module" src="/js/drive.js"></script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 # Robot Car Setup Guide (OSOYOO Pi Car, model 2020005500)
 
 This guide takes a fresh Raspberry Pi to a car whose **wheels move** and whose
-**camera shows live video in a laptop browser and in the Quest headset**.
-Joystick driving comes next, one file at a time, after these tests pass.
+**camera shows live video in a laptop browser and in the Quest headset**
+(Tests 1-3). Driving from the headset, the camera servo and the rear sensors
+come after that; see "After Test 3" at the end.
 
 **Rule for the whole project: test one layer at a time.** Each test below
 adds exactly one new thing. If a test fails, the problem is in that one new
@@ -14,19 +15,25 @@ thing, not anywhere else.
 
 ```
 robot-car/
-├── SETUP.md            this guide
-├── motor_test.py       Test 1: spins each wheel briefly
-└── camera_server.py    Test 2: live camera in a browser
-                        Test 3: the same camera on a floating screen
-                                in the Quest headset (/xr page)
-└── static/
-    └── three.module.min.js   3D library for the headset page (Three.js,
-                              MIT licence), served by the Pi so the
-                              headset doesn't need internet
+├── SETUP.md              this guide
+├── camera_server.py      camera + website (Tests 2-3); run on the Pi
+├── drive_server.py       driving from the headset; run on the Pi
+├── hardware/             the car's parts, one file each (each is also a test)
+│   ├── camera_pan.py     front camera servo
+│   ├── rear_sensor.py    the two rear ultrasonic sensors
+│   └── pi_status.py      Pi temperature, load, Wi-Fi, power
+├── tests/
+│   ├── motor_test.py     Test 1: spins each wheel briefly
+│   └── README.md         every test command in one table
+└── web/                  the website, sent by camera_server.py
+    ├── pages/            video.html (laptop), drive.html (headset)
+    ├── css/              how the pages look
+    ├── js/               what the pages do (drive.js = the headset page)
+    └── lib/three.module.min.js   3D library (Three.js, MIT licence), served
+                                  by the Pi so the headset needs no internet
 ```
 
-Nothing else is needed yet. More files are added only when the next test
-needs them.
+Run every command from `~/robot-car` on the Pi, e.g. `python3 tests/motor_test.py`.
 
 ## What you need
 
@@ -192,6 +199,14 @@ scp -r robot-car USERNAME@picar.local:~/
 This puts the folder at `~/robot-car` on the Pi. Whenever you change a file
 on your laptop, run the same `scp` command again to update the Pi.
 
+**Pi set up before November 2026?** The files were reorganised into
+`hardware/`, `tests/` and `web/`. `scp` adds the new folders but leaves the
+old copies behind, so remove them once on the Pi (this keeps `cert.pem` and
+`key.pem`, so the headset doesn't need to accept a new certificate):
+```bash
+cd ~/robot-car && rm -f camera_pan.py rear_sensor.py pi_status.py motor_test.py && rm -rf static __pycache__
+```
+
 *(Alternative, once this folder is pushed to GitHub: on the Pi, run
 `git clone https://github.com/MKVBII/Capstone_Fall_2026_VirtualRobotics_Team_5.git`,
 then `git pull` to get updates.)*
@@ -205,7 +220,7 @@ then `git pull` to get updates.)*
 3. On the Pi:
    ```bash
    cd ~/robot-car
-   python3 motor_test.py
+   python3 tests/motor_test.py
    ```
 4. It prints `forward`, `backward`, `left`, `right`, `done`, with a short spin
    for each. **Ctrl+C** stops it at any time.
@@ -214,14 +229,15 @@ then `git pull` to get updates.)*
 - [ ] The wheels really went forward.
 - [ ] The wheels went backward.
 
-The joystick driving code needs this answer to know which pin pattern means
-forward.
+On our car they went backward, so `LEFT_REVERSED` and `RIGHT_REVERSED` are
+`True` in both `tests/motor_test.py` and `drive_server.py`. A different car
+may need them `False`; keep the two files matching.
 
 | What you see | What it means |
 |---|---|
 | Prints, but nothing moves | The battery is off or flat. The Pi is fine. |
 | Only one wheel moves | That motor's wires going into the driver board. |
-| "left" spins the wrong wheel | Left and right are swapped. See the comment in `motor_test.py` under "ASSUMPTION WORTH CHECKING". |
+| "left" spins the wrong wheel | Left and right are swapped. See the comment in `tests/motor_test.py` under "ASSUMPTION WORTH CHECKING". |
 | Error mentioning I2C or `busio` | Re-run `i2cdetect -y 1` (Step 4). |
 | `No module named ...` | Re-run the install line from Step 3 that mentions that name. |
 
@@ -233,14 +249,14 @@ forward.
    python3 camera_server.py
    ```
    It prints `Sensor mode: ... full view` (the camera is using its whole
-   view, not a zoomed-in crop), `Camera on: 1024x768 at 15 fps`, and the two
+   view, not a zoomed-in crop), `Camera on: 1024x768 at 45 fps`, and the two
    addresses it serves:
    ```
    Laptop:  http://<this Pi's IP>:8000
-   Headset: https://<this Pi's IP>:8443/xr   (mixed reality)
+   Headset: https://<this Pi's IP>:8443/drive   (mixed reality)
    ```
    Then, every 5 seconds, it prints `camera running: 15.0 frames/s, NN KB per
-   frame`. That line means the camera is working, even before you open a browser.
+   frame` (the number depends on the camera and settings). That line means the camera is working, even before you open a browser.
    The very first run also prints `Creating a self-signed https certificate`
    and makes `cert.pem` and `key.pem` in the same folder. They're reused
    after that, and `.gitignore` keeps them off GitHub.
@@ -267,7 +283,8 @@ forward.
 
 ## Test 3: Camera in the headset (mixed reality)
 
-Same program as Test 2; nothing new to install. The `/xr` page shows the
+Same program as Test 2; nothing new to install. The `/drive` page (also
+reachable as `/xr`) shows the
 camera as a floating screen in your real room: the Quest's passthrough
 shows your surroundings, and the screen stays where it was put, so you can
 look around and look back at it. No browser window, no address bar.
@@ -290,11 +307,11 @@ address changes):
 1. Start `camera_server.py` on the Pi, exactly as in Test 2.
 2. In the Quest Browser, go to:
    ```
-   http://PI_IP:8000/xr
+   http://PI_IP:8000/drive
    ```
    (Typing the IP is more reliable than `picar.local` on the Quest. The link
    at the bottom of the laptop page also leads here.)
-   *Backup if the setting above won't work:* `https://PI_IP:8443/xr`. The
+   *Backup if the setting above won't work:* `https://PI_IP:8443/drive`. The
    first time, it warns that the connection isn't private; tap **Advanced**,
    then **Proceed to … (unsafe)**.
 3. You'll see a preview of the video and a blue **Enter mixed reality**
@@ -306,19 +323,19 @@ address changes):
    wherever you're facing.
 6. To leave, press the **Meta button** on the right controller.
 
-The page's 3D library comes from the Pi (`static/three.module.min.js`), so
+The page's 3D library comes from the Pi (`web/lib/three.module.min.js`), so
 the headset doesn't need internet access. Copy the whole `robot-car`
-folder, including `static/`, to the Pi.
+folder, including `web/`, to the Pi.
 
 **Latency, sharpness and motion blur** are set near the top of
 `camera_server.py`:
 
 | Setting | Default | Effect |
 |---|---|---|
-| `FRAMES_PER_SECOND` | 60 | Smoother, fresher pictures. The camera uses as many as it can in full view (the start-up log says how many). Set 30 if the video stutters. |
+| `FRAMES_PER_SECOND` | 45 | Smoother, fresher pictures. The camera uses as many as it can in full view (the start-up log says how many). Set 30 if the video stutters. |
 | `QUALITY` | `"HIGH"` | Detail per picture. `"VERY_HIGH"` is sharper; `"MEDIUM"` if video stutters on your Wi-Fi. |
 | `SHORT_EXPOSURE` | `True` | Less motion blur; can look grainier in dim rooms. |
-| `SHUTTER_US` | `None` | Strongest motion-blur fix: a fixed shutter time. Try `8000` (1/125 s) or `4000` (1/250 s). Needs a well-lit room, or the picture gets grainy. |
+| `SHUTTER_US` | `2000` | Strongest motion-blur fix: a fixed shutter time (2000 = 1/500 s). `8000` (1/125 s) is brighter; `None` turns it off. Short times need a well-lit room, or the picture gets grainy. |
 | `WIDTH, HEIGHT` | 1024, 768 | 1280, 960 is sharper but needs more Wi-Fi; 640, 480 allows the highest frame rate. Keep it 4:3. |
 
 More light is the single biggest help for motion blur: in a bright room the
@@ -329,14 +346,14 @@ The Wi-Fi matters as much as the settings: put the Pi and Quest on the
 
 | What you see | What it means |
 |---|---|
-| Button says "Mixed reality blocked on http://" | The one-time Quest setting isn't on, or the address in its box doesn't exactly match (check `http://`, the IP and `:8000`, with no `/xr` on the end). The page shows the exact address to type. |
+| Button says "Mixed reality blocked on http://" | The one-time Quest setting isn't on, or the address in its box doesn't exactly match (check `http://`, the IP and `:8000`, with nothing after the port). The page shows the exact address to type. |
 | "This site can't provide a secure connection" | You typed `https://` with port 8000. Use `http://` with 8000, or `https://` with **8443**. |
 | Page never finishes loading | Make sure the Pi has the latest `camera_server.py` (Step 5) and restart it. Older versions could freeze over https. |
 | Button says "Mixed reality not available here" | You're not in the Quest browser, or it's out of date. Update the headset's software. |
-| Button says "Problem - see below" | The text under it says what failed. Usually the `static` folder is missing on the Pi: copy the whole `robot-car` folder again (Step 5). |
+| Button says "Problem - see below" | The text under it says what failed. Usually the `web` folder is missing on the Pi: copy the whole `robot-car` folder again (Step 5). |
 | Preview shows video, but the screen in the headset is black | Leave mixed reality and look at the preview. If that's frozen too, it's the stream (see Test 2). |
 | Tag says **NO VIDEO** | The Pi stopped sending pictures, or the Wi-Fi dropped. The page reconnects by itself every second. |
-| Screen is too big, small, close or far | Change `PANEL_WIDTH`, `PANEL_DISTANCE` or `PANEL_DROP` near the top of the page's script in `camera_server.py`. |
+| Screen is too big, small, close or far | Change `PANEL_WIDTH`, `PANEL_DISTANCE` or `PANEL_DROP` in the SETTINGS section at the top of `web/js/drive.js`. |
 
 ---
 
@@ -350,11 +367,19 @@ The Wi-Fi matters as much as the settings: put the Pi and Quest on the
   `tmux attach` to get back to it.
 - **See which Python libraries are installed:** `pip3 list`.
 
-## What comes next (not built yet, on purpose)
+## After Test 3
 
-Each step gets its own file(s) and its own test, after the previous one passes:
+These are built and each has its own test. Full step-by-step instructions are
+in the team's test plans; every command is also listed in `tests/README.md`.
 
-1. **Test 4: joystick driving.** Send the Quest thumbstick to the Pi over a
-   WebSocket and drive the motors. It reuses `motor_test.py`'s exact pins,
-   library (gpiozero) and 1000 Hz setting, plus the forward direction you
-   recorded in Test 1.
+| Step | Command (from `~/robot-car`) | What it adds |
+|---|---|---|
+| Pi health | `python3 hardware/pi_status.py` | Temperature, load, Wi-Fi, power readings |
+| Camera servo | `python3 hardware/camera_pan.py --center`, then `python3 hardware/camera_pan.py` | Head-look camera (PWM HAT channel 15) |
+| Rear sensors | `python3 hardware/rear_sensor.py --selftest`, then `python3 hardware/rear_sensor.py` | Obstacles behind (pins 38/40) and edges (pins 29/31) |
+| Driving, no motors | `python3 drive_server.py --dry-run` + the headset page | Sticks reach the Pi; prints wheel values |
+| Driving on a block | `python3 drive_server.py --no-floor` | Real motors, wheels in the air |
+| Driving on the floor | `python3 drive_server.py` (car on the floor at start-up) | Everything together |
+
+Run `camera_server.py` in one SSH window (or tmux pane) and `drive_server.py`
+in another, both from `~/robot-car`.

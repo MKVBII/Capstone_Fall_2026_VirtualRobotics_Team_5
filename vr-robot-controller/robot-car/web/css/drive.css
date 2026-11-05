@@ -1,0 +1,84 @@
+/*
+  drive.css - the look of the headset page's 2D parts (pages/drive.html).
+  Only used before entering mixed reality, or on a laptop; inside mixed
+  reality everything is drawn in 3D by js/drive.js.
+*/
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  color: #e8eaed;
+  font-family: system-ui, sans-serif;
+}
+
+/* The video preview fills the whole window, with no black bars (a little
+   is trimmed off if the window's shape differs from the camera's). The
+   floating screen in mixed reality always shows the whole picture. */
+#video {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Enter button + help text, floating over the bottom of the video. */
+#panel {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  text-align: center;
+  background: rgba(11, 13, 16, 0.72);
+}
+
+#enter {
+  font-size: 20px;
+  padding: 12px 32px;
+  border: 0;
+  border-radius: 999px;
+  background: #3b82f6;
+  color: #fff;
+  cursor: pointer;
+}
+#enter:disabled { background: #333; color: #999; cursor: default; }
+
+#msg { color: #c4c7cc; max-width: 560px; font-size: 14px; line-height: 1.4; }
+#msg code { background: #222; padding: 1px 5px; border-radius: 4px; color: #fff; }
+
+/* Rear-sensor pill + one line of readings, at the top of the 2D page. */
+#hud2d {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#rear {
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: #8e8e93;   /* replaced by the state colour from drive.js */
+  color: #000;
+}
+#info2d {
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: rgba(11, 13, 16, 0.72);
+  white-space: nowrap;
+}

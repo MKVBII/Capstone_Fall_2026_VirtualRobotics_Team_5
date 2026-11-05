@@ -1,3 +1,13 @@
+"""
+https_server.py - ARCHIVED early test (September 2026). Kept for history.
+
+Served the files in the current folder over https on port 8443, to prove the
+Quest would open a secure (https) page from the Pi - which WebXR requires.
+Replaced by camera_server.py, which serves the website over https on the
+same port. Don't run both at once.
+Ran on the Pi, next to cert.pem/key.pem:   python3 https_server.py
+"""
+
 import http.server
 import ssl
  
