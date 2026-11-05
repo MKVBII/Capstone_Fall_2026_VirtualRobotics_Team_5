@@ -253,7 +253,7 @@ may need them `False`; keep the two files matching.
    addresses it serves:
    ```
    Laptop:  http://<this Pi's IP>:8000
-   Headset: https://<this Pi's IP>:8443/drive   (mixed reality)
+   Headset: https://<this Pi's IP>:8443/begin   (mixed reality)
    ```
    Then, every 5 seconds, it prints `camera running: 15.0 frames/s, NN KB per
    frame` (the number depends on the camera and settings). That line means the camera is working, even before you open a browser.
@@ -283,8 +283,8 @@ may need them `False`; keep the two files matching.
 
 ## Test 3: Camera in the headset (mixed reality)
 
-Same program as Test 2; nothing new to install. The `/drive` page (also
-reachable as `/xr`) shows the
+Same program as Test 2; nothing new to install. The `/begin` page (also
+reachable as `/drive` and `/xr`) shows the
 camera as a floating screen in your real room: the Quest's passthrough
 shows your surroundings, and the screen stays where it was put, so you can
 look around and look back at it. No browser window, no address bar.
@@ -307,11 +307,11 @@ address changes):
 1. Start `camera_server.py` on the Pi, exactly as in Test 2.
 2. In the Quest Browser, go to:
    ```
-   http://PI_IP:8000/drive
+   http://PI_IP:8000/begin
    ```
    (Typing the IP is more reliable than `picar.local` on the Quest. The link
    at the bottom of the laptop page also leads here.)
-   *Backup if the setting above won't work:* `https://PI_IP:8443/drive`. The
+   *Backup if the setting above won't work:* `https://PI_IP:8443/begin`. The
    first time, it warns that the connection isn't private; tap **Advanced**,
    then **Proceed to … (unsafe)**.
 3. You'll see a preview of the video and a blue **Enter mixed reality**
@@ -353,7 +353,7 @@ The Wi-Fi matters as much as the settings: put the Pi and Quest on the
 | Button says "Problem - see below" | The text under it says what failed. Usually the `web` folder is missing on the Pi: copy the whole `robot-car` folder again (Step 5). |
 | Preview shows video, but the screen in the headset is black | Leave mixed reality and look at the preview. If that's frozen too, it's the stream (see Test 2). |
 | Tag says **NO VIDEO** | The Pi stopped sending pictures, or the Wi-Fi dropped. The page reconnects by itself every second. |
-| Screen is too big, small, close or far | Change `PANEL_WIDTH`, `PANEL_DISTANCE` or `PANEL_DROP` in the SETTINGS section at the top of `web/js/drive.js`. |
+| Screen is too big, small, close or far | Change **Video screen size**, **Screen distance** or **Screen below eye level** in Settings (the gear under the video, or `/settings` on a laptop). |
 
 ---
 
@@ -383,3 +383,23 @@ in the team's test plans; every command is also listed in `tests/README.md`.
 
 Run `camera_server.py` in one SSH window (or tmux pane) and `drive_server.py`
 in another, both from `~/robot-car`.
+
+## The website
+
+With both programs running, open `http://PI_IP:8000/` (laptop) or
+`https://PI_IP:8443/` (Quest):
+
+| Page | What it's for |
+|---|---|
+| `/` Start | Robot status, links to everything, session log (record / download CSV) |
+| `/begin` Drive | Live checks, the controls, how to stop, **Enter mixed reality** |
+| `/settings` | Every setting; saved on the Pi (`settings.json`), shared with the headset |
+| `/spectator` | A mirror of the driver's headset (video, alerts, dashboard, help card, settings), scaled to fit the window, for an audience (view-only). Open it as `http://PI_IP:8000/spectator` on a laptop: no certificate warning, readings come from drive_server.py's view-only port 8766 |
+| `/about` | What the project does, how it works, screenshots |
+| `/video` | Just the video, full window |
+
+In the headset, the buttons under the video are head-look, dashboard,
+re-centre, help and settings: point a controller at one and pull the
+trigger. On the car, X also toggles head-look and A cycles the dashboard
+(change or remove these under Settings → Controls). The robot stops while
+the settings panel is open.

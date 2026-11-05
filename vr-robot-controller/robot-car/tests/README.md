@@ -13,3 +13,9 @@ Hardware and self-tests for the robot car. Run everything from `~/robot-car` on 
 | `python3 drive_server.py --dry-run --fake-sensor` | The control server with no motors and no sensors | `cert.pem`/`key.pem` (made by `camera_server.py`) |
 
 Test one layer at a time: if a test fails, the problem is in the one new thing it adds. The full step-by-step order is in `../SETUP.md`.
+
+## Website and headset
+
+Run `camera_server.py` and `drive_server.py --dry-run --fake-sensor`, then open the pages in a browser:
+`/` (start + session log), `/begin`, `/settings`, `/spectator`, `/about`. The headset page needs the
+Quest (or Meta's Quest emulator in a desktop browser) to enter mixed reality.

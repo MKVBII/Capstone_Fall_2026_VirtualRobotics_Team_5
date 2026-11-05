@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!--
+  index.html - the start screen: what this is, is the robot ready, and
+  where to go next (drive, settings, spectator view, about, session log).
+
+  Served by:  camera_server.py at  /   (http://PI_IP:8000/ or https://PI_IP:8443/)
+  Code:       ../css/site.css (look), ../js/start.js (live status + session log)
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VR Robot Controller</title>
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    .hero { padding: 12px 0 8px; }
+    .hero p { font-size: 18px; max-width: 720px; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+    .thumb { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; background: #000; display: block; }
+    .logs { list-style: none; padding: 0; margin: 12px 0 0; }
+    .logs li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">VR Robot Controller</a>
+    <nav>
+      <a href="/" aria-current="page">Start</a>
+      <a href="/begin">Drive</a>
+      <a href="/settings">Settings</a>
+      <a href="/spectator">Spectator</a>
+      <a href="/about">About</a>
+    </nav>
+    <button class="theme-toggle" type="button"></button>
+  </header>
+
+  <main class="container stack">
+    <section class="hero">
+      <h1>Drive real robots from a Meta Quest 3</h1>
+      <p class="muted">A universal VR controller running on a Raspberry Pi. See through the
+         robot's camera on a screen floating in your room, and drive it with the Quest controllers.</p>
+      <div class="actions">
+        <a class="btn primary big" href="/begin">Drive</a>
+        <a class="btn big" href="/settings">Settings</a>
+        <a class="btn big" href="/spectator">Spectator view</a>
+        <a class="btn big" href="/about">About</a>
+      </div>
+    </section>
+
+    <div class="grid two">
+      <section class="card">
+        <div class="row" style="justify-content: space-between">
+          <h2 style="margin:0">Robot</h2>
+          <span class="pill" id="ready"><span class="dot"></span><span>Checking...</span></span>
+        </div>
+        <p class="muted" id="robot-name" style="margin-top:8px">Connecting...</p>
+        <img class="thumb" src="/stream" alt="Live camera picture from the robot">
+        <ul class="checklist" id="status"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Session log</h2>
+        <p class="muted">Records every sensor reading, the sticks and the wheel power, 10 times a
+           second, to a spreadsheet file (CSV). Useful for graphs in the report, or to see why the
+           robot slowed or stopped.</p>
+        <div class="row">
+          <button class="btn primary" id="log-toggle" type="button" disabled>Start recording</button>
+          <span class="muted" id="log-state"></span>
+        </div>
+        <ul class="logs" id="logs"></ul>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="/js/start.js"></script>
+</body>
+</html>

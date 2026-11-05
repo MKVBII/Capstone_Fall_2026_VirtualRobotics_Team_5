@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!--
+  about.html - what the project does, how it works, project details, and a
+  gallery (car photos + screenshots of the features).
+
+  Served by:  camera_server.py at  /about
+  Pictures:   ../img/  - screenshots (screen-*.png) and car photos.
+              To add car photos: put car-1.jpg, car-2.jpg, car-3.jpg in
+              web/img/; they replace the placeholders automatically.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About - VR Robot Controller</title>
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    .feature svg { width: 72px; height: 72px; color: var(--accent); margin-bottom: 10px; }
+    .diagram { width: 100%; height: auto; color: var(--text); }
+    .diagram .box { fill: var(--surface-2); stroke: var(--border); stroke-width: 2; }
+    .diagram .pi { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; }
+    .diagram text { fill: var(--text); font: 600 15px system-ui, sans-serif; }
+    .diagram .small { fill: var(--muted); font-weight: 400; font-size: 13px; }
+    .diagram .arrow { stroke: var(--muted); stroke-width: 2; fill: none; marker-end: url(#head); }
+    dl.details { display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; margin: 0; }
+    dl.details dt { color: var(--muted); }
+    dl.details dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">VR Robot Controller</a>
+    <nav>
+      <a href="/">Start</a>
+      <a href="/begin">Drive</a>
+      <a href="/settings">Settings</a>
+      <a href="/spectator">Spectator</a>
+      <a href="/about" aria-current="page">About</a>
+    </nav>
+    <button class="theme-toggle" type="button"></button>
+  </header>
+
+  <main class="container stack">
+    <div>
+      <h1>About the project</h1>
+      <p class="muted" style="max-width:760px">Many small robots are controlled the same way: a few motors
+         and a camera, run by a small computer. This project builds one VR controller for robots like
+         these, starting with a Raspberry Pi robot car.</p>
+    </div>
+
+    <h2>What it does</h2>
+    <div class="grid three">
+      <section class="card feature">
+        <svg viewBox="0 0 72 72" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+          <rect x="10" y="14" width="52" height="36" rx="6"/><circle cx="36" cy="32" r="9"/>
+          <path d="M22 60h28M36 50v10"/></svg>
+        <h3>See through the robot's camera</h3>
+        <p class="muted">The camera appears on a screen floating in your real room (mixed reality).
+           With head-look on, the camera turns when you turn your head.</p>
+      </section>
+      <section class="card feature">
+        <svg viewBox="0 0 72 72" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+          <path d="M14 30c0-9 6-14 14-14h16c8 0 14 5 14 14l-2 18c-1 6-8 8-12 3l-4-5H32l-4 5c-4 5-11 3-12-3z"/>
+          <circle cx="27" cy="31" r="5"/><circle cx="47" cy="27" r="2.5"/><circle cx="51" cy="34" r="2.5"/></svg>
+        <h3>Drive with the Quest controllers</h3>
+        <p class="muted">Left stick drives forward and back, right stick turns. If the connection
+           drops for 0.3 seconds, the robot stops by itself.</p>
+      </section>
+      <section class="card feature">
+        <svg viewBox="0 0 72 72" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+          <rect x="26" y="10" width="20" height="30" rx="5"/><path d="M20 48a16 16 0 0 0 32 0M14 52a22 22 0 0 0 44 0"/></svg>
+        <h3>Safety sensors</h3>
+        <p class="muted">Ultrasonic sensors slow the robot as it backs toward something, stop it
+           before it hits, and stop it at a table edge. The headset shows a parking-sensor display
+           and beeps.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>How it works</h2>
+      <svg class="diagram" viewBox="0 0 900 300" role="img"
+           aria-label="The Quest headset talks to the Raspberry Pi over Wi-Fi. camera_server.py sends the video; drive_server.py receives the joysticks, drives the motors and sends the sensor readings back.">
+        <defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0L10 5L0 10z" fill="currentColor" opacity="0.6"/></marker></defs>
+        <rect class="box" x="20" y="100" width="170" height="100" rx="14"/>
+        <text x="105" y="140" text-anchor="middle">Meta Quest 3</text>
+        <text class="small" x="105" y="164" text-anchor="middle">headset page in</text>
+        <text class="small" x="105" y="182" text-anchor="middle">the Quest browser</text>
+
+        <rect class="pi" x="300" y="20" width="330" height="260" rx="18"/>
+        <text x="465" y="48" text-anchor="middle">Raspberry Pi (on the robot)</text>
+        <rect class="box" x="325" y="70" width="280" height="80" rx="12"/>
+        <text x="465" y="104" text-anchor="middle">camera_server.py</text>
+        <text class="small" x="465" y="126" text-anchor="middle">video + website</text>
+        <rect class="box" x="325" y="175" width="280" height="80" rx="12"/>
+        <text x="465" y="209" text-anchor="middle">drive_server.py</text>
+        <text class="small" x="465" y="231" text-anchor="middle">controls, safety stop, readings</text>
+
+        <rect class="box" x="720" y="60" width="160" height="60" rx="12"/>
+        <text x="800" y="96" text-anchor="middle">Camera</text>
+        <rect class="box" x="720" y="140" width="160" height="60" rx="12"/>
+        <text x="800" y="176" text-anchor="middle">Motors + servo</text>
+        <rect class="box" x="720" y="220" width="160" height="60" rx="12"/>
+        <text x="800" y="256" text-anchor="middle">Sensors</text>
+
+        <path class="arrow" d="M325 105 H195"/>
+        <text class="small" x="258" y="96" text-anchor="middle">video</text>
+        <path class="arrow" d="M195 160 C 250 160 260 210 320 210"/>
+        <text class="small" x="244" y="178" text-anchor="middle">sticks</text>
+        <path class="arrow" d="M325 225 C 260 225 250 190 195 185"/>
+        <text class="small" x="262" y="244" text-anchor="middle">readings</text>
+        <path class="arrow" d="M720 90 H610"/>
+        <path class="arrow" d="M610 205 H715 V175"/>
+        <path class="arrow" d="M720 250 H610"/>
+        <text class="small" x="105" y="236" text-anchor="middle">Wi-Fi (5 GHz router)</text>
+      </svg>
+      <p class="muted">The headset's "app" is a web page the Pi serves, so there's nothing to install on
+         the Quest. Video and controls are separate programs, so a video slowdown can never delay a
+         steering command or the safety stop.</p>
+    </section>
+
+    <section class="card">
+      <h2>Project details</h2>
+      <dl class="details">
+        <dt>Project</dt><dd>Virtual Robotics: VR Robot Controller</dd>
+        <dt>Course</dt><dd>Capstone, Fall 2026 <span class="muted">(course number: to add)</span></dd>
+        <dt>Team</dt><dd>Team 5, Merrimack College</dd>
+        <dt>Advisor</dt><dd class="muted">To add</dd>
+        <dt>Robot</dt><dd>OSOYOO Pi Car (model 2020005500) with a Raspberry Pi 4</dd>
+        <dt>Headset</dt><dd>Meta Quest 3, mixed reality (WebXR in the Quest browser)</dd>
+        <dt>Software</dt><dd>Python (Flask, websockets, gpiozero, picamera2) on the Pi; JavaScript and three.js in the headset</dd>
+        <dt>Code</dt><dd class="muted">GitHub link: to add once the repository is public</dd>
+      </dl>
+    </section>
+
+    <section class="stack">
+      <h2>Gallery</h2>
+      <h3>The car</h3>
+      <div class="grid three" id="car-photos">
+        <figure><div class="placeholder">Car photo 1<br>(add web/img/car-1.jpg)</div></figure>
+        <figure><div class="placeholder">Car photo 2<br>(add web/img/car-2.jpg)</div></figure>
+        <figure><div class="placeholder">Car photo 3<br>(add web/img/car-3.jpg)</div></figure>
+      </div>
+      <h3>Features</h3>
+      <p class="muted">Screenshots from the test setup (Meta's Quest 3 emulator, with a simulated camera
+         picture). To use real ones: in the headset, Meta button → Camera → Take photo, then replace
+         the screen-*.png files in web/img/.</p>
+      <div class="grid two">
+        <figure><img src="/img/screen-driving.png" alt="The camera on a floating screen, with the quick buttons under it" loading="lazy">
+          <figcaption>Driving: the camera on a floating screen, status tags and quick buttons underneath.</figcaption></figure>
+        <figure><img src="/img/screen-dashboard.png" alt="Dashboard with the parking-sensor graphic and reading cards" loading="lazy">
+          <figcaption>Dashboard: parking-sensor graphic, reverse allowed, and the chosen readings.</figcaption></figure>
+        <figure><img src="/img/screen-alert.png" alt="Amber alert banner across the top of the video" loading="lazy">
+          <figcaption>Alerts: the banner and screen border warn as something gets close behind.</figcaption></figure>
+        <figure><img src="/img/screen-settings.png" alt="The settings panel in the headset" loading="lazy">
+          <figcaption>Settings in the headset: point and click. The robot pauses while it's open.</figcaption></figure>
+        <figure><img src="/img/screen-begin.png" alt="The begin screen with its live checklist" loading="lazy">
+          <figcaption>Begin screen: live checks, the controls and how to stop.</figcaption></figure>
+        <figure><img src="/img/screen-spectator.png" alt="Spectator view with the video and dashboard" loading="lazy">
+          <figcaption>Spectator view: what the driver sees, for an audience.</figcaption></figure>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Car photos: if web/img/car-N.jpg exists, it replaces placeholder N.
+    document.querySelectorAll("#car-photos figure").forEach(function (fig, i) {
+      var img = new Image();
+      img.alt = "Photo of the robot car";
+      img.onload = function () { fig.innerHTML = ""; fig.appendChild(img); };
+      img.src = "/img/car-" + (i + 1) + ".jpg";
+    });
+    // A screenshot that isn't there yet becomes a placeholder instead of a broken image.
+    document.querySelectorAll("figure img").forEach(function (img) {
+      img.addEventListener("error", function () {
+        var p = document.createElement("div"); p.className = "placeholder"; p.textContent = "Screenshot coming soon";
+        img.replaceWith(p);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -6,10 +6,16 @@ camera_server.py - the car's camera, live in a browser, plus the website.
 
 Runs on:   the Raspberry Pi, from ~/robot-car
 Run:       python3 camera_server.py          (Ctrl+C to stop)
-Serves:    http://PI_IP:8000/          plain video page (laptop, phone)
-           https://PI_IP:8443/drive    headset page: video on a floating
-                                       screen in mixed reality + driving
-                                       (/xr is the same page, older address)
+Serves:    http://PI_IP:8000/  or  https://PI_IP:8443/   the website:
+             /            start screen
+             /begin       pre-drive checks + controls + "Enter mixed reality"
+                          (the headset page; /drive and /xr are the same page)
+             /settings    settings (shared with the headset's settings panel)
+             /spectator   big video + the driver's readings, for an audience
+             /about       what the project does and how it works
+             /video       just the video, full window
+           Mixed reality needs https: use https://PI_IP:8443/begin on the Quest
+           (or the one-time Quest setting in SETUP.md for http).
 Pages:     web/  (pages/, css/, js/, lib/) - this file only sends them
 Works with drive_server.py, which the headset page connects to for the
 joysticks (wss://PI_IP:8765). Run both from the same folder so they share
@@ -49,14 +55,25 @@ WHY THIS APPROACH
 =============================================================================
 ADDRESSES THIS SERVER ANSWERS
 =============================================================================
-    /              web/pages/video.html   plain video page
-    /drive, /xr    web/pages/drive.html   headset page
-    /stream        the MJPEG video
-    /config.json   picture size + port numbers, read by web/js/drive.js
-    /css/..., /js/..., /lib/...           files from web/
+    /                      web/pages/index.html      start screen
+    /begin, /drive, /xr    web/pages/drive.html      headset page (begin screen in 2D)
+    /settings              web/pages/settings.html
+    /spectator             web/pages/spectator.html
+    /about                 web/pages/about.html
+    /video                 web/pages/video.html      plain video page
+    /stream                the MJPEG video
+    /config.json           picture size + port numbers, read by the pages
+    /api/settings          GET: saved settings (JSON). POST: save new ones.
+                           Kept in settings.json next to this file, so the
+                           laptop settings page and the headset share them.
+    /api/logs              GET: the session logs drive_server.py has saved
+    /logs/<name>           download one session log (CSV)
+    /css/..., /js/..., /lib/..., /img/...   files from web/
 """
 
 import io
+import json
+# ^ Reading and writing settings.json.
 # ^ io.BufferedIOBase: the "file-like object" shape picamera2 writes into.
 import logging
 # ^ Timestamped messages, so you can see in the SSH window what's happening.
@@ -71,9 +88,10 @@ import threading
 import time
 # ^ Used to measure and log the frame rate.
 
-from flask import Flask, Response, jsonify, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 # ^ Flask: the web server. Response: lets us send the never-ending video
-#   stream. jsonify / send_from_directory: send /config.json and the pages.
+#   stream. jsonify / send_from_directory: send JSON and files. request: the
+#   settings a page sends to /api/settings.
 #   Installed by `pip3 install flask ... --break-system-packages` (SETUP.md step 3).
 from werkzeug.serving import make_server
 # ^ Werkzeug is the web server underneath Flask (installed with it).
@@ -108,6 +126,10 @@ HTTPS_PORT = 8443
 DRIVE_PORT = 8765
 # ^ Where drive_server.py listens for the joysticks (wss://PI_IP:8765).
 #   Must match PORT in drive_server.py. Sent to the headset page in /config.json.
+
+VIEWER_PORT = 8766
+# ^ drive_server.py's view-only door (ws://PI_IP:8766, no certificate), used by
+#   laptop pages opened over plain http. Must match VIEWER_PORT in drive_server.py.
 
 WIDTH, HEIGHT = 1024, 768
 # ^ Picture size in pixels. Keep it 4:3 (640x480, 1024x768, 1280x960):
@@ -156,6 +178,11 @@ WEB_DIR = os.path.join(HERE, "web")
 PAGES_DIR = os.path.join(WEB_DIR, "pages")
 # ^ The website's files. Flask serves everything in web/ at the top level,
 #   e.g. web/js/drive.js -> /js/drive.js.
+SETTINGS_FILE = os.path.join(HERE, "settings.json")
+# ^ The website/headset settings, saved by /api/settings. Delete it to go
+#   back to the defaults (or use "Reset to defaults" on the settings page).
+LOG_DIR = os.path.join(HERE, "logs")
+# ^ Where drive_server.py saves session logs (same folder it uses).
 CERT_FILE = os.path.join(HERE, "cert.pem")
 KEY_FILE = os.path.join(HERE, "key.pem")
 # ^ Where the https certificate and its secret key are kept: next to this
@@ -353,28 +380,116 @@ app = Flask(__name__, static_folder=WEB_DIR, static_url_path="")
 #   (/, /drive, /stream ...) take priority over files with the same name.
 
 
+def page(name):
+    """Send one page from web/pages/."""
+    return send_from_directory(PAGES_DIR, name)
+
+
 @app.route("/")
 def index():
-    """The plain video page: http://PI_IP:8000/"""
-    return send_from_directory(PAGES_DIR, "video.html")
+    """The start screen."""
+    return page("index.html")
 
 
+@app.route("/begin")
 @app.route("/drive")
 @app.route("/xr")
 def drive():
-    """The headset page: https://PI_IP:8443/drive (or the older /xr)."""
-    return send_from_directory(PAGES_DIR, "drive.html")
+    """The headset page: begin screen in 2D, driving in mixed reality.
+    /drive and /xr are older addresses for the same page."""
+    return page("drive.html")
+
+
+@app.route("/settings")
+def settings_page():
+    """The settings page (laptop or Quest browser)."""
+    return page("settings.html")
+
+
+@app.route("/spectator")
+def spectator():
+    """Big video + the driver's readings, view-only, for an audience."""
+    return page("spectator.html")
+
+
+@app.route("/about")
+def about():
+    """What the project does, how it works, project details, gallery."""
+    return page("about.html")
+
+
+@app.route("/video")
+def video():
+    """Just the video, full window (the old plain page)."""
+    return page("video.html")
 
 
 @app.route("/config.json")
 def config():
-    """Settings the headset page needs, so they're set in ONE place (above).
+    """Settings the pages need, so they're set in ONE place (above).
 
     Returns:
-        JSON: video_width, video_height, https_port, drive_port.
+        JSON: video_width, video_height, https_port, drive_port, viewer_port.
     """
     return jsonify(video_width=WIDTH, video_height=HEIGHT,
-                   https_port=HTTPS_PORT, drive_port=DRIVE_PORT)
+                   https_port=HTTPS_PORT, drive_port=DRIVE_PORT, viewer_port=VIEWER_PORT)
+
+
+settings_lock = threading.Lock()
+# ^ Two pages saving at the same moment must not write the file at once.
+
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def api_settings():
+    """Read or save the website/headset settings.
+
+    GET returns what's saved ({} if nothing yet; each page fills in its
+    defaults, see web/js/settings.js). POST saves the JSON object sent,
+    replacing what was there; it must be an object of at most 20 KB.
+    """
+    with settings_lock:
+        if request.method == "POST":
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict) or len(request.get_data()) > 20_000:
+                return jsonify(error="settings must be a JSON object under 20 KB"), 400
+            tmp = SETTINGS_FILE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(data, f, indent=1)
+            os.replace(tmp, SETTINGS_FILE)
+            # ^ Write a new file, then swap it in, so a power cut mid-save
+            #   can't leave a half-written settings file.
+            return jsonify(ok=True)
+        try:
+            with open(SETTINGS_FILE) as f:
+                return jsonify(json.load(f))
+        except (OSError, ValueError):
+            return jsonify({})
+
+
+@app.route("/api/logs")
+def api_logs():
+    """List the saved session logs, newest first.
+
+    Returns:
+        JSON list of {name, size_kb, modified} (modified = seconds since 1970).
+    """
+    try:
+        names = [n for n in os.listdir(LOG_DIR) if n.endswith(".csv")]
+    except OSError:
+        names = []
+    logs = []
+    for n in names:
+        st = os.stat(os.path.join(LOG_DIR, n))
+        logs.append({"name": n, "size_kb": round(st.st_size / 1024, 1), "modified": st.st_mtime})
+    logs.sort(key=lambda l: l["modified"], reverse=True)
+    return jsonify(logs)
+
+
+@app.route("/logs/<path:name>")
+def download_log(name):
+    """Download one session log. send_from_directory refuses names that
+    try to reach outside the logs folder."""
+    return send_from_directory(LOG_DIR, name, as_attachment=True)
 
 
 def generate_frames():
@@ -497,7 +612,7 @@ if __name__ == "__main__":
     #   quality=...: how much detail each JPEG keeps (QUALITY setting above).
     log.info("Camera on: %dx%d at %d fps, %s quality", WIDTH, HEIGHT, FRAMES_PER_SECOND, QUALITY)
     log.info("Laptop:  http://<this Pi's IP>:%d          (find the IP with: hostname -I)", HTTP_PORT)
-    log.info("Headset: https://<this Pi's IP>:%d/drive   (mixed reality)", HTTPS_PORT)
+    log.info("Headset: https://<this Pi's IP>:%d/begin   (mixed reality)", HTTPS_PORT)
 
     try:
         threading.Thread(target=http_server.serve_forever, daemon=True).start()

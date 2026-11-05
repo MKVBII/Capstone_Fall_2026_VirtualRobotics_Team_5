@@ -1,0 +1,173 @@
+/*
+  site.css - the shared look of every web page (start, about, begin,
+  settings, spectator).
+
+  Colours are "tokens" (CSS variables) defined twice: once for dark mode,
+  once for light. js/theme.js sets <html data-theme="dark|light"> and
+  <html data-scheme="standard|colourblind|contrast">, and everything below
+  uses the tokens, so pages never pick a colour directly.
+*/
+
+/* ---- Colour tokens ------------------------------------------------------ */
+:root, :root[data-theme="dark"] {
+  --bg: #0f1115;          /* page background */
+  --surface: #171a21;     /* cards */
+  --surface-2: #20242d;   /* inputs, inset areas */
+  --border: #2d323d;
+  --text: #e8eaed;
+  --muted: #a3a9b3;       /* secondary text */
+  --accent: #4c8dff;      /* buttons, links */
+  --accent-text: #ffffff;
+  --ok: #34c759;          /* status colours: same meaning everywhere */
+  --warn: #ffcc00;
+  --danger: #ff453a;
+  --off: #8e8e93;
+  --shadow: none;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceef2;
+  --border: #d7dbe2;
+  --text: #15171b;
+  --muted: #59606d;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --ok: #1e8e46;
+  --warn: #a96b00;
+  --danger: #d32f2f;
+  --off: #6b7280;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  color-scheme: light;
+}
+/* Colour-blind-safe status colours (blue / orange / vermilion). */
+:root[data-scheme="colourblind"] { --ok: #3d9bdc; --warn: #e69f00; --danger: #e5571b; }
+:root[data-theme="light"][data-scheme="colourblind"] { --ok: #0068a8; --warn: #b26b00; --danger: #c2410c; }
+/* High contrast: stronger borders and text. */
+:root[data-scheme="contrast"] { --border: #6b7280; --muted: #d1d5db; }
+:root[data-theme="light"][data-scheme="contrast"] { --border: #4b5563; --muted: #1f2937; --text: #000; }
+
+/* ---- Base --------------------------------------------------------------- */
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--accent); }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; }
+h2 { font-size: 21px; margin: 0 0 12px; }
+h3 { font-size: 17px; margin: 0 0 6px; }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); }
+code { background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: 0.92em; }
+
+/* ---- Header (every page) ----------------------------------------------- */
+.site-header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.site-header .brand { font-weight: 700; color: var(--text); text-decoration: none; margin-right: auto; }
+.site-header nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.site-header nav a {
+  color: var(--muted); text-decoration: none;
+  padding: 8px 12px; border-radius: 8px; min-height: 40px; display: inline-flex; align-items: center;
+}
+.site-header nav a:hover, .site-header nav a[aria-current="page"] { color: var(--text); background: var(--surface-2); }
+
+/* The sun / moon button (js/theme.js fills in the icon). */
+.theme-toggle {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  cursor: pointer; display: grid; place-items: center; flex: none;
+}
+.theme-toggle svg { width: 20px; height: 20px; }
+
+/* ---- Layout ------------------------------------------------------------- */
+.container { max-width: 1100px; margin: 0 auto; padding: 28px 20px 48px; }
+.grid { display: grid; gap: 16px; }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid.three { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.stack > * + * { margin-top: 16px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+/* ---- Buttons (big: the Quest browser is driven by a pointer) ------------ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 22px;
+  border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text);
+  font: inherit; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.big { min-height: 64px; font-size: 19px; padding: 0 28px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn.danger { border-color: var(--danger); color: var(--danger); }
+
+/* ---- Status dots and pills ---------------------------------------------- */
+.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--off); flex: none; display: inline-block; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+.dot.danger { background: var(--danger); } .dot.off { background: var(--off); }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px;
+        background: var(--surface-2); font-size: 14px; font-weight: 600; }
+
+/* ---- Checklist (begin screen, start screen) ----------------------------- */
+.checklist { list-style: none; margin: 0; padding: 0; }
+.checklist li { display: grid; grid-template-columns: 16px 1fr auto; gap: 4px 12px; align-items: center;
+                padding: 10px 0; border-bottom: 1px solid var(--border); }
+.checklist li:last-child { border-bottom: 0; }
+.checklist .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.checklist .fix { grid-column: 2 / 4; color: var(--muted); font-size: 14px; }
+
+/* ---- Forms (settings page) ---------------------------------------------- */
+.setting { display: grid; grid-template-columns: 1fr minmax(180px, 280px); gap: 12px; align-items: center;
+           padding: 12px 0; border-bottom: 1px solid var(--border); }
+.setting:last-child { border-bottom: 0; }
+.setting .hint { display: block; color: var(--muted); font-size: 14px; }
+select, input[type="number"] {
+  min-height: 44px; width: 100%; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit;
+}
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.switch { position: relative; width: 52px; height: 30px; display: inline-block; justify-self: end; }
+.switch input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; position: absolute; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background .15s; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px;
+                      border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(22px); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 8px; flex-wrap: wrap; }
+.tabs button { min-height: 44px; padding: 0 16px; border: 0; border-bottom: 3px solid transparent;
+               background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+
+/* ---- Small helpers ------------------------------------------------------ */
+.notice { padding: 12px 16px; border-radius: 10px; background: var(--surface-2); border-left: 4px solid var(--accent); }
+.notice.warn { border-left-color: var(--warn); }
+.notice.danger { border-left-color: var(--danger); }
+.placeholder { display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: 12px;
+               border: 2px dashed var(--border); color: var(--muted); text-align: center; padding: 12px; }
+figure { margin: 0; }
+figure img { width: 100%; border-radius: 12px; border: 1px solid var(--border); display: block; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .setting { grid-template-columns: 1fr; }
+  .site-header { flex-wrap: wrap; }
+}

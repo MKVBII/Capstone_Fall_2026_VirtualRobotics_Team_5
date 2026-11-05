@@ -442,6 +442,10 @@ class RearSensor:
           down_state               and its state (None if switched off)
           state, reverse_limit,    the two combined - see combine()
           source
+          sensors                  the same readings per sensor, keyed by the
+                                   ids in describe(): {"back": {cm, state},
+                                   "down": {cm, floor_cm, state}} - what the
+                                   headset's dashboard is drawn from
         """
         now = self.clock()
         dt = 0.0 if self._last_read is None else min(now - self._last_read, 0.5)
@@ -496,6 +500,37 @@ class RearSensor:
 
         state, limit, source = combine(back, down)
         out.update(state=state, reverse_limit=limit, source=source)
+        out["sensors"] = {}
+        if self.back:
+            out["sensors"]["back"] = {"cm": out["cm"], "state": out["back_state"]}
+        if self.down:
+            out["sensors"]["down"] = {"cm": out["down_cm"], "floor_cm": out["floor_cm"],
+                                      "state": out["down_state"]}
+        return out
+
+    def describe(self):
+        """The sensor list the headset builds its display from (one entry per
+        sensor that's switched on). Adding a sensor to the car = adding an
+        entry here (and its reading in read()); no headset code changes.
+
+        Each entry:
+            id        matches the keys of read()["sensors"] and read()["source"]
+            name      shown on the dashboard, alerts and checklist
+            kind      "distance" (arcs on the parking graphic), "edge" (a strip
+                      on that side), "number" (a reading card) or "onoff"
+            position  where it sits on the robot: front, rear, left, right,
+                      front_left, front_right, rear_left, rear_right
+            slow_cm, stop_cm   (distance sensors) where slowing / stopping starts
+            fix       what to check if it stops answering (Begin-screen checklist)
+        """
+        out = []
+        if self.back:
+            out.append({"id": "back", "name": "Rear", "kind": "distance", "position": "rear",
+                        "slow_cm": SLOW_CM, "stop_cm": STOP_CM,
+                        "fix": "Check the rear sensor: TRIG pin 38, ECHO pin 40, and its power"})
+        if self.down:
+            out.append({"id": "down", "name": "Floor", "kind": "edge", "position": "rear",
+                        "fix": "Check the floor sensor: TRIG pin 29, ECHO pin 31, and its power"})
         return out
 
     def close(self):

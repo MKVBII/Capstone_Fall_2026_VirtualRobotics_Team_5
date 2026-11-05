@@ -44,15 +44,33 @@ SAFETY: if no message arrives for 0.3 s (Wi-Fi drop, headset off, browser
 crash), the motors stop. They also stop when the headset disconnects and
 when this program exits.
 
-MESSAGES BACK TO THE HEADSET (on the same WebSocket):
-    {"type": "rear", ...}     rear sensors + wheel power, 10x a second
-    {"type": "status", ...}   Pi health + camera angle, once a second
-    {"type": "pong", "t"}     reply to the headset's {"type": "ping", "t"},
-                              so it can show the control-link delay
+MESSAGES FROM THE PAGES (any page on the website can connect):
+    {"type": "hello", "role": "driver" | "viewer"}
+                              sent first. A "viewer" (start screen, spectator
+                              view) only watches: its sticks are ignored and
+                              its leaving doesn't stop the car. A page that
+                              never says hello counts as a driver.
+    {"lx", "ly", "rx", "ry", "pan"}   the sticks (drivers only), 25x a second
+    {"type": "ping", "t"}     answered with {"type": "pong", "t"}, so the
+                              page can show the control-link delay
+    {"type": "log", "on": true | false}   start / stop the session log
+
+MESSAGES BACK TO THE PAGES (on the same WebSocket):
+    {"type": "robot", ...}    once, on connecting: the robot's name, its
+                              controls and its sensor list (see robot_info)
+    {"type": "readings", ...} rear sensors + wheel power, 10x a second
+    {"type": "status", ...}   Pi health, camera angle, session log, once a second
+    {"type": "pong", "t"}     reply to a ping
+
+SESSION LOG: while it's on, 10 rows a second go into logs/session-*.csv
+(time, sticks, wheel power, every sensor reading and state, Pi health).
+camera_server.py lists and downloads them from the start screen.
 """
 
 import asyncio
+import csv
 import json
+import os
 import ssl
 import sys
 import time
@@ -70,6 +88,13 @@ from hardware.rear_sensor import RearSensor, limit_reverse, describe_calibration
 
 # --- Network (must match DRIVE_PORT in camera_server.py) ---------------------
 PORT = 8765
+VIEWER_PORT = 8766
+# ^ A second, VIEW-ONLY door without encryption (ws://PI_IP:8766), for laptop
+#   pages opened over plain http (e.g. http://PI_IP:8000/spectator). Those
+#   pages can't use wss:// until the browser has accepted the Pi's self-made
+#   certificate, so their readings would never show. Nothing sent here can
+#   move the car: every connection on this port is treated as a viewer.
+#   Must match VIEWER_PORT in camera_server.py.
 CERT_FILE = "cert.pem"
 KEY_FILE = "key.pem"
 
@@ -108,6 +133,25 @@ TURN_GAIN = 1.0
 
 # --- Safety ------------------------------------------------------------------
 WATCHDOG_TIMEOUT = 0.3   # seconds without a message before we stop the car
+
+# --- What the website shows about this robot ----------------------------------
+ROBOT_NAME = "OSOYOO Pi Car"
+CONTROLS = [
+    {"input": "left_stick", "label": "Forward / back"},
+    {"input": "right_stick", "label": "Turn"},
+]
+# ^ The robot's own controls, for the Begin screen's controller drawing and
+#   the in-headset help card. The headset page adds its own (grip, trigger,
+#   Meta button). Inputs: left_stick, right_stick, a, b, x, y.
+DEFAULT_SHORTCUTS = {"x": "headlook", "a": "dashboard"}
+# ^ Quest buttons this robot leaves free, given to headset shortcuts by
+#   default (team decision 2026-11-04: X = head-look, A = dashboard, for the
+#   car only). Choices: headlook, dashboard, recenter, help, settings. A
+#   robot that needs a button for itself leaves it out of this list.
+
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+# ^ Where session logs are saved (robot-car/logs/). .gitignore keeps them out
+#   of GitHub; download them from the start screen.
 
 
 # =============================================================================
@@ -317,26 +361,135 @@ class FakeMotors:
 
 motors = None             # Motors or FakeMotors, set up at start
 rear = None               # RearSensor, set up at start
-clients = set()           # open headset connections, to send readings back
+clients = set()           # open page connections (drivers and viewers), to send readings to
 last_wheels = (0.0, 0.0)  # what the wheels were last told, for the info panel
+last_sticks = {}          # the last stick message from a driver, for the session log
+last_status = {}          # the last status message, for the session log
 last_message_time = 0.0   # when the last stick message arrived (time.monotonic)
+NO_DRIVER_UI = {"type": "ui", "driver": False}
+last_ui = NO_DRIVER_UI    # what the headset is showing, relayed to the spectator view
+
+# The "ui" keys the headset may send, and the type each must be. Anything
+# else is dropped, so a page can't stuff other data into the relay.
+UI_KEYS = {"in_mr": bool, "head_look": bool, "info_mode": int, "settings_open": bool,
+           "help_open": bool, "settings_tab": str, "settings_page": int, "card_page": int,
+           "video_fps": (int, float), "video_live": bool, "link_ms": (int, float, type(None)),
+           "pan": (int, float), "pressed": list, "sticks": dict}
 
 
-async def handler(ws):
-    """Serve one headset connection until it closes.
+def clean_ui(data):
+    """Keep only the known "ui" keys, with the right types (see UI_KEYS).
 
-    For each stick message: limit reverse by the rear sensors, drive the
-    motors, and move the camera servo. Ping messages are answered at once.
-    When the connection closes for any reason, the car stops and the camera
-    re-centres.
+    Args:
+        data: the message from the headset (a dict).
+    Returns:
+        dict: {"type": "ui", "driver": True, ...the allowed keys}
+    """
+    out = {"type": "ui", "driver": True}
+    for key, kind in UI_KEYS.items():
+        value = data.get(key)
+        if isinstance(value, kind) and not (kind is int and isinstance(value, bool)):
+            out[key] = value
+    out["pressed"] = [p for p in out.get("pressed", []) if isinstance(p, str)][:16]
+    if len(json.dumps(out)) > 2000:          # far more than a real message needs
+        return {"type": "ui", "driver": True}
+    return out
+
+
+class SessionLog:
+    """Records the drive to a CSV file while it's switched on.
+
+    One row per readings message (10 a second): everything needed to graph
+    a run or work out afterwards why the car slowed or stopped.
+    """
+
+    FIELDS = ["time_s", "lx", "ly", "rx", "ry", "pan", "left_pct", "right_pct",
+              "state", "reverse_limit", "source", "rear_cm", "rear_state",
+              "floor_reading_cm", "floor_baseline_cm", "floor_state",
+              "cpu_temp_c", "cpu_load_pct", "wifi_dbm", "power_ok"]
+
+    def __init__(self):
+        self.file = None          # the open CSV file, or None when off
+        self.writer = None
+        self.name = None          # file name, e.g. session-20261105-131500.csv
+        self.started = 0.0        # time.monotonic() when it was switched on
+
+    def start(self):
+        """Open a new log file (does nothing if one is already open)."""
+        if self.file:
+            return
+        os.makedirs(LOG_DIR, exist_ok=True)
+        self.name = time.strftime("session-%Y%m%d-%H%M%S.csv")
+        self.file = open(os.path.join(LOG_DIR, self.name), "w", newline="")
+        self.writer = csv.writer(self.file)
+        self.writer.writerow(self.FIELDS)
+        self.started = time.monotonic()
+        print(f"session log on: logs/{self.name}")
+
+    def stop(self):
+        """Close the log file (does nothing if none is open)."""
+        if not self.file:
+            return
+        self.file.close()
+        print(f"session log off: logs/{self.name}")
+        self.file = self.writer = self.name = None
+
+    def write(self, readings, sticks, wheels, status):
+        """Add one row, if the log is on.
+
+        Args:
+            readings: rear.read(); sticks: the last stick message;
+            wheels: (left, right) actually sent to the motors;
+            status: the last status message.
+        """
+        if not self.writer:
+            return
+        self.writer.writerow([
+            round(time.monotonic() - self.started, 2),
+            sticks.get("lx"), sticks.get("ly"), sticks.get("rx"), sticks.get("ry"),
+            sticks.get("pan"), round(wheels[0] * 100), round(wheels[1] * 100),
+            readings["state"], readings["reverse_limit"], readings["source"],
+            readings["cm"], readings["back_state"],
+            readings["down_cm"], readings["floor_cm"], readings["down_state"],
+            status.get("cpu_temp_c"), status.get("cpu_load_pct"),
+            status.get("wifi_dbm"), status.get("power_ok"),
+        ])
+
+
+session_log = SessionLog()
+
+
+def robot_info():
+    """The "robot" message: what the website needs to know about this robot.
+
+    Sent to every page when it connects. The Begin screen draws the controls
+    from it; the dashboard, alerts and checklist are built from "sensors".
+    """
+    return {"type": "robot", "name": ROBOT_NAME, "controls": CONTROLS,
+            "shortcuts": DEFAULT_SHORTCUTS, "sensors": rear.describe()}
+
+
+async def handler(ws, view_only=False):
+    """Serve one page connection until it closes.
+
+    Drivers: for each stick message, limit reverse by the rear sensors,
+    drive the motors and move the camera servo; when a driver's connection
+    closes for any reason, the car stops and the camera re-centres.
+    Viewers only receive readings. Pings and log switches work for both.
+    A driver also sends "ui" messages (what the headset is showing); they're
+    passed on to every page, so the spectator view can mirror the headset.
 
     Args:
         ws: the WebSocket connection (from the websockets library).
+        view_only: True on VIEWER_PORT: always a viewer, whatever it says.
     """
-    global last_message_time, last_wheels
-    print("headset connected")
+    global last_message_time, last_wheels, last_sticks, last_ui
+    role = "viewer" if view_only else "driver"   # until the page says otherwise (see "hello")
     clients.add(ws)
+    print("page connected")
     try:
+        await ws.send(json.dumps(robot_info()))
+        await ws.send(json.dumps(last_ui))
         async for msg in ws:
             try:
                 data = json.loads(msg)
@@ -344,15 +497,30 @@ async def handler(ws):
                 continue
             if not isinstance(data, dict):
                 continue
-            if data.get("type") == "ping":
-                # answer at once, so the headset can time the round trip
+            kind = data.get("type")
+            if kind == "hello":
+                role = "viewer" if view_only or data.get("role") == "viewer" else "driver"
+                print(f"  ...as a {role}")
+                continue
+            if kind == "ping":
+                # answer at once, so the page can time the round trip
                 await ws.send(json.dumps({"type": "pong", "t": data.get("t")}))
+                continue
+            if kind == "log":
+                session_log.start() if data.get("on") else session_log.stop()
+                continue
+            if role != "driver":
+                continue                                     # viewers can't drive
+            if kind == "ui":
+                last_ui = clean_ui(data)                     # mirror it to the spectator view
+                websockets.broadcast(clients, json.dumps(last_ui))
                 continue
 
             wheels = message_to_wheels(msg)
             if wheels is None:
                 continue
             last_message_time = time.monotonic()
+            last_sticks = data
             limit = rear.read()["reverse_limit"]
             last_wheels = limit_reverse(*wheels, limit)
             motors.drive(*last_wheels)
@@ -360,11 +528,16 @@ async def handler(ws):
                 motors.camera.set(data["pan"])
     finally:
         clients.discard(ws)
-        # connection closed for any reason -> stop
-        motors.stop()
-        last_wheels = (0.0, 0.0)
-        motors.camera.set(0)                                 # camera back to centre
-        print("headset disconnected, motors stopped")
+        if role == "driver":
+            # a driver's connection closed for any reason -> stop
+            motors.stop()
+            last_wheels = (0.0, 0.0)
+            motors.camera.set(0)                             # camera back to centre
+            last_ui = NO_DRIVER_UI
+            websockets.broadcast(clients, json.dumps(last_ui))
+            print("driver disconnected, motors stopped")
+        else:
+            print("viewer disconnected")
 
 
 async def watchdog():
@@ -385,30 +558,37 @@ async def watchdog():
             stopped = False
 
 
-async def rear_push():
-    """Send the rear sensors (and the wheel power) to every open headset page, 10x a second."""
+async def readings_push():
+    """10x a second: send the sensor readings (and wheel power) to every page,
+    and add a row to the session log if it's on."""
     while True:
         await asyncio.sleep(0.1)
+        readings = rear.read()
+        session_log.write(readings, last_sticks, last_wheels, last_status)
         websockets.broadcast(clients, json.dumps({
-            "type": "rear", **rear.read(),
+            "type": "readings", **readings,
             "left_pct": round(last_wheels[0] * 100),     # what the wheels are
             "right_pct": round(last_wheels[1] * 100),    # actually being told
         }))
 
 
 async def status_push():
-    """Send the info-panel readings (Pi health + camera angle) once a second."""
+    """Once a second: send the info-panel readings (Pi health, camera angle,
+    session log) to every page."""
+    global last_status
     while True:
         await asyncio.sleep(1.0)
-        if not clients:
+        if not clients and not session_log.file:
             continue
         status = await asyncio.to_thread(pi_status.read_status)
         # ^ in a thread: vcgencmd takes a few ms, and the stick messages
         #   shouldn't wait for it
-        status.update({"type": "status", "pan_deg": motors.camera.angle})
+        status.update({"type": "status", "pan_deg": motors.camera.angle,
+                       "logging": session_log.name})
         # A robot with more sensors adds more keys here, e.g. "speed_mps",
         # "altitude_m", "heading_deg", "battery_v": the headset's info panel
         # shows any of those it receives and leaves out the rest.
+        last_status = status
         websockets.broadcast(clients, json.dumps(status))
 
 
@@ -420,10 +600,15 @@ async def main():
     #   don't let an https page open a plain ws:// connection.
 
     asyncio.create_task(watchdog())
-    asyncio.create_task(rear_push())
+    asyncio.create_task(readings_push())
     asyncio.create_task(status_push())
-    async with websockets.serve(handler, "0.0.0.0", PORT, ssl=ssl_context):
+    async def view_only_handler(ws):
+        await handler(ws, view_only=True)
+
+    async with websockets.serve(handler, "0.0.0.0", PORT, ssl=ssl_context), \
+               websockets.serve(view_only_handler, "0.0.0.0", VIEWER_PORT):
         print(f"drive server listening on wss://0.0.0.0:{PORT}")
+        print(f"view-only readings for http pages on ws://0.0.0.0:{VIEWER_PORT}")
         await asyncio.Future()       # run until Ctrl+C
 
 
@@ -451,4 +636,5 @@ if __name__ == "__main__":
     finally:
         motors.close()
         rear.close()
+        session_log.stop()
         print("motors stopped, bye")
